@@ -22,6 +22,8 @@
     "check:release": "node scripts/try-release.mjs",
     "ui": "node scripts/ui.mjs",
     "check:ui": "node scripts/try-ui.mjs",
+    "check:project": "node scripts/check-project.mjs .",
+    "check:checks": "node scripts/try-checks.mjs",
     "check:tool": "node scripts/try-tool.mjs ."
   },
   "files": [

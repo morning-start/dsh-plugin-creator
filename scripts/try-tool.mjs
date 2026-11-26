@@ -37,7 +37,7 @@ const ctx = {
 
 apply(ctx)
 const names = [...registered.keys()].sort()
-if (names.length !== 5) throw new Error(`expected 5 tools, got ${names.join(', ') || 'none'}`)
+if (names.length !== 6) throw new Error(`expected 6 tools, got ${names.join(', ') || 'none'}`)
 if (guards.length !== 1) throw new Error(`expected 1 guard, got ${guards.length}`)
 console.log(`registered: ${names.join(', ')} (+1 guard)\n`)
 
@@ -90,6 +90,15 @@ const ui = registered.get('dsh_plugin_ui')
 const uiClose = await ui.execute({ action: 'close', port: 9334 }, {})
 if (typeof uiClose.summary !== 'string') throw new Error('dsh_plugin_ui close returned no summary')
 console.log(`dsh_plugin_ui: ${uiClose.summary}`)
+
+// The project-check tool shares lib/checks.js with the CLI; try-checks.mjs
+// covers the engine, this proves the tool runs this repository's own rules.
+const project = registered.get('dsh_project_check')
+const projectReport = await project.execute({ path: repo }, {})
+if (projectReport.ok !== true) {
+  throw new Error(`dsh_project_check on this repo: ${JSON.stringify(projectReport.checks.filter(item => item.status !== 'pass'))}`)
+}
+console.log(`dsh_project_check: ${projectReport.summary.pass} pass from ${projectReport.source.split(/[\\/]/).pop()}`)
 console.log(`dsh_sandbox: ${sandboxEmpty.summary.split('\n')[0]}`)
 
 // --- install guard ---------------------------------------------------------

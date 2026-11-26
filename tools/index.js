@@ -21,6 +21,7 @@ import { scaffold } from '../lib/scaffold.js'
 import { Sandboxes } from '../lib/sandbox.js'
 import { inspectRelease, packRelease, rehearseRelease } from '../lib/release.js'
 import { openPage, runAssertions, stopChrome } from '../lib/ui.js'
+import { RULE_TYPES, runProjectChecks } from '../lib/checks.js'
 
 export const name = 'powerful-tools'
 export const inject = ['tools']
@@ -31,6 +32,7 @@ export const inject = ['tools']
  */
 export function apply(ctx) {
   ctx.effect(() => ctx.tools.register(pluginCheck), 'dsh-plugin-powerful/dsh_plugin_check')
+  ctx.effect(() => ctx.tools.register(projectCheck), 'dsh-plugin-powerful/dsh_project_check')
   ctx.effect(() => ctx.tools.register(pluginNew(() => sessionDirectory(ctx))), 'dsh-plugin-powerful/dsh_plugin_new')
   ctx.effect(() => ctx.tools.register(sandboxTool(() => sessionDirectory(ctx))), 'dsh-plugin-powerful/dsh_sandbox')
   ctx.effect(() => ctx.tools.register(releaseTool), 'dsh-plugin-powerful/dsh_plugin_release')
@@ -148,6 +150,83 @@ function sessionDirectory(ctx) {
       return undefined
     }
   }
+}
+
+/**
+ * Run a project's own declared checks (`checks.json`).
+ *
+ * Separate from `dsh_plugin_check`, which knows what a *bundle* must look like.
+ * This one knows nothing: the project states its rules — documentation links
+ * resolve, locale files agree, a layered tree does not import outward — and the
+ * engine runs them. Boundaries live with the project that owns them.
+ */
+const projectCheck = {
+  name: 'dsh_project_check',
+  description:
+    'Run the checks a project declares in checks.json (or dsh-checks.json). Rule types: doc-links (relative markdown links resolve), locale-parity (locale files carry the same keys), import-boundary (a layered source tree must not import outward, reach for host modules from an inner layer, or pull in packages where it should not), no-console, file-exists / file-absent / files-listed / placeholder-free / json-field / frontmatter-name. Read-only; every rule reports pass/warn/fail instead of stopping at the first problem.',
+  parameters: {
+    type: 'object',
+    properties: {
+      path: { type: 'string', description: 'Project directory holding the checks file. Absolute.' },
+      config: { type: 'string', description: 'An explicit checks file, instead of checks.json at the project root.' },
+      only: {
+        type: 'array',
+        items: { type: 'string' },
+        description: 'Run only these rule ids (or types). Useful while fixing one group.',
+      },
+    },
+    required: ['path'],
+  },
+  output: {
+    schema: {
+      type: 'object',
+      properties: {
+        ok: { type: 'boolean' },
+        target: { type: 'string' },
+        source: { type: 'string', description: 'The checks file that was used.' },
+        summary: {
+          type: 'object',
+          properties: {
+            pass: { type: 'integer' },
+            warn: { type: 'integer' },
+            fail: { type: 'integer' },
+          },
+          required: ['pass', 'warn', 'fail'],
+        },
+        checks: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              id: { type: 'string' },
+              status: { type: 'string', enum: ['pass', 'warn', 'fail'] },
+              message: { type: 'string' },
+            },
+            required: ['id', 'status', 'message'],
+          },
+        },
+      },
+      required: ['ok', 'target', 'source', 'summary', 'checks'],
+    },
+    render: (_args, value) => [{ type: 'text', text: renderProjectChecks(value) }],
+  },
+  async execute(args) {
+    return await runProjectChecks(String(args.path), {
+      config: args.config === undefined ? undefined : String(args.config),
+      only: Array.isArray(args.only) ? args.only.map(String) : undefined,
+    })
+  },
+}
+
+function renderProjectChecks(value) {
+  const lines = [`${value.target} — ${value.summary.pass} pass, ${value.summary.warn} warn, ${value.summary.fail} fail`]
+  lines.push(`checks: ${value.source}`)
+  for (const check of value.checks) {
+    if (check.status === 'pass') continue
+    lines.push(`${check.status.toUpperCase()} ${check.id}: ${check.message}`)
+  }
+  if (value.summary.fail === 0) lines.push('Every declared check passed.')
+  return lines.join('\n')
 }
 
 /**

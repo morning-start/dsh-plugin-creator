@@ -1,0 +1,28 @@
+{
+  "version": 1,
+  "description": "Project checks for this bundle. Rules are data; see docs/CHECKS.md.",
+  "rules": [
+    {
+      "id": "docs:links",
+      "type": "doc-links",
+      "exclude": ["\\.dsh-memory/", "^tmp/"]
+    },
+    {
+      "id": "locale:parity",
+      "type": "locale-parity",
+      "files": ["locale/en.json", "locale/zh.json"]
+    },
+    {
+      "id": "bundle:entry",
+      "type": "file-exists",
+      "path": "index.js"
+    },
+    {
+      "id": "bundle:patch",
+      "type": "json-field",
+      "path": "package.json",
+      "field": "dsh.bundle.patch",
+      "equals": "./cordis.patch.yml"
+    }
+  ]
+}

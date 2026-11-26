@@ -8,6 +8,7 @@ README 讲能力，这个文件讲**具体是哪个工具、什么参数、边�
 |---|---|---|
 | 从标准模板起一个插件包 | `dsh_plugin_new` + 技能 `dsh-plugin-new`（负责问询） | `scripts/new-bundle.mjs` |
 | 检查一个包为什么装不上 / 显示不出来 | `dsh_plugin_check` | `scripts/try-tool.mjs`（只测自身） |
+| 项目自己的规范检查（断链 / locale / 分层 / console） | `dsh_project_check` | `scripts/check-project.mjs` |
 | 拦住开发中插件的本地安装 | 安装守卫（不是工具，见下） | — |
 | 沙盒测试（建 / 起 / 探 / 停 / 清） | `dsh_sandbox` + 技能 `dsh-plugin-sandbox`（负责判断） | `scripts/sandbox.mjs` |
 | 看页面 / 断言 / 真实点击 | `dsh_plugin_ui` | `scripts/ui.mjs` |
@@ -74,6 +75,20 @@ README 讲能力，这个文件讲**具体是哪个工具、什么参数、边�
 
 `project` 默认取会话工作目录。`start` 与 `open` 的区别只是「谁按下去」；两种方式加模型都由用户做一次。
 
+### `dsh_project_check`
+
+跑项目自己在 `checks.json`（或 `dsh-checks.json`）里声明的规则。**只读**，逐条给 pass/warn/fail。
+
+| 参数 | 说明 |
+|---|---|
+| `path` | 项目目录（绝对路径） |
+| `config` | 指定另一个检查文件，默认在项目根找 |
+| `only` | 只跑这些规则 id（或类型），修某一组时用 |
+
+规则类型：`doc-links`（相对 markdown 链接可解析）、`locale-parity`（多语言 key 一致）、`import-boundary`（分层依赖方向 / 宿主模块 / 外部包）、`no-console`，以及通用的 `file-exists` / `file-absent` / `files-listed` / `placeholder-free` / `json-field` / `frontmatter-name`。
+
+**边界**：不做 lint、不跑测试、不生成契约文件；分层必须显式写，不替你推断。规则语义与「别乱加豁免」的教训见 [`CHECKS.md`](CHECKS.md)。
+
 ### `dsh_plugin_ui`
 
 用无头浏览器（CDP）看真页面。**截图证明渲染，断言证明对错**，两者都不能代替人看观感。
@@ -128,10 +143,11 @@ README 讲能力，这个文件讲**具体是哪个工具、什么参数、边�
 
 | 脚本 | 覆盖 |
 |---|---|
-| `scripts/try-tool.mjs` | 五个工具挂载 + 生成一个包并自检 + 13 个守卫用例 |
+| `scripts/try-tool.mjs` | 六个工具挂载 + 生成一个包并自检 + 13 个守卫用例 |
 | `scripts/try-generate.mjs` | 通用引擎与规则引擎（40 项）+ 两种 bundle 变体 |
 | `scripts/try-sandbox.mjs` | 沙盒引擎（45 项，假启动器，不开真宿主） |
 | `scripts/try-release.mjs` | 发版检查（30 项：semver 子集、就绪检查、真实包面） |
 | `scripts/try-ui.mjs` | 真浏览器：断言、真实点击/输入、截图 PNG、console error 捕获 |
+| `scripts/try-checks.mjs` | 项目规则引擎（26 项：断链、locale 对齐、分层越界、console、checks 文件） |
 | `scripts/check-patch.mjs` | `cordis.patch.yml` 与出货预设的漂移 |
 | `scripts/check-skills.mjs` | 技能 frontmatter（需 DSH 运行时的 YAML 库） |

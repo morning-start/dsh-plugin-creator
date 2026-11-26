@@ -6,7 +6,7 @@ A plugin-development toolkit for DeepSeek Harness (DSH). Installing it extends *
 
 An agent-era scaffolding toolkit for DSH plugins. A plugin's life runs **构思 → 项目启动 → 规范化开发与检查 → 功能测试 → 集成测试 → 发版**; this package makes the mechanical parts of that cycle stable and fast, and leaves the judgment to skills and conversation.
 
-Where it stands today, stated plainly: **project start**, **functional testing**, **client UI checks**, and **release checks** are in place; **normalized checks** (lint, architecture, contracts, doc links) are half-built. The gap list is deliberate — it is the roadmap.
+Where it stands today, stated plainly: **project start**, **normalized checks**, **functional testing**, **client UI checks**, and **release checks** are in place; **conception** (turning a need into a plugin shape) is still just conversation. The gap list is deliberate — it is the roadmap.
 
 The first design rule: **Creator mode's own tools are this plugin's foundation.** Before adding anything, read what the preset already ships (`dsh --profile <p> --dump-config`, `cordis_inspect_*`) instead of re-implementing it. Installing and enabling is `plugin_manager`'s job; runtime truth comes from Inspect, not from reading source; anything that is judgment belongs in a skill. The full statement — the six-stage capability table with its gaps, the 32 shipped plugins grouped by what each means for the design, and the four design principles — is in [docs/PHILOSOPHY.md](docs/PHILOSOPHY.md) (Chinese).
 
@@ -17,6 +17,8 @@ Capabilities, not a feature list. Which tool implements which capability — wit
 **Start a plugin from a standard template.** One call produces the manifest, the bundle patch, the entry module, locale dictionaries, an icon, a README, and optionally an example tool and a skill. Deterministic: the same input always produces the same files. It validates its own output before returning, so the structural report arrives in the same turn as the plugin.
 
 **Know why a package will not install or will not show up.** A read-only structural check reports every problem it finds instead of throwing on the first one: manifest fields, the declared bundle patch, exported locale and icon resources, the entry module, the declared detail document, the packaging whitelist. Each check is pass / warn / fail.
+
+**Enforce the project's own boundaries as rules.** A `checks.json` at the project root declares what must stay true — relative documentation links resolve, locale files carry the same keys, a layered source tree does not import outward or reach for host modules from an inner layer, no console logging where it does not belong. The engine runs them and reports every violation with a sentence you can act on. The boundaries belong to the project, not to the tool. See [docs/CHECKS.md](docs/CHECKS.md).
 
 **Keep a plugin under development out of the environment you work in.** Installing from a local directory is refused, with three deliberate exceptions: a published version, a host that is itself a sandbox, or an explicit decision by the user. The risk is asymmetric — a broken patch in a sandbox costs one restart, the same patch in the working profile costs a host that boots broken — so this is a guard, not advice.
 
@@ -216,14 +218,15 @@ Ordered by the lifecycle gaps in [docs/PHILOSOPHY.md](docs/PHILOSOPHY.md) §1 �
 
 **规范化开发与检查**
 
-- A verify entry point for generated projects (lint, build, tests) — the template currently ships no `scripts/verify`.
-- Contract checks as a tool: the ones a real plugin project had to hand-write (architecture boundaries, panel/tool/config contracts, doc links).
+- Done: project-declared rules (`checks.json`) covering documentation links, locale parity, import boundaries, console hygiene, plus the bundle's own structural check.
+- Next: ship a starter `checks.json` inside the generated bundle, so a new project starts with the rules it should not have to rediscover.
+- Next: a contract-drift rule (generate the panel/tool/config contract, compare it to the committed file) — generation is the missing half.
 - More `dsh_plugin_check` coverage: YAML syntax of the patch (needs a parser), preset declarations, skill frontmatter.
 
 **集成测试**
 
-- Client-side assertions as a tool: slot registration and theme tokens via Inspect, so "the tab is there" stops depending on a human eye.
-- A visual smoke path that does not fake evidence when browser control is unavailable.
+- Done: CDP-driven screenshots, assertions, real clicks and typing against a sandbox page.
+- Next: slot registration and theme tokens through Inspect, so "the tab is there" is also checked on the Host side rather than only in the DOM.
 
 **发版**
 
