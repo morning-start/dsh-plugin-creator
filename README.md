@@ -18,6 +18,8 @@ Capabilities, not a feature list. Which tool implements which capability — wit
 
 **Know why a package will not install or will not show up.** A read-only structural check reports every problem it finds instead of throwing on the first one: manifest fields, the declared bundle patch, exported locale and icon resources, the entry module, the declared detail document, the packaging whitelist. Each check is pass / warn / fail.
 
+**Deliver a package that carries nothing of yours and shows what it can do.** The same check looks for the author's own account paths and credential shapes — a private key, an API token, a home directory — and fails on them, while placeholder accounts in examples stay quiet. It refuses install-time hooks and dynamic code evaluation, and it prints the plugin's capability inventory: which files run commands, open connections, write files, or read the environment. That last part is a report rather than a verdict, because "will not break anything" cannot be proven by a static check — but what a plugin *can* do can be listed, and a reviewer deserves to see it.
+
 **Enforce the project's own boundaries as rules.** A `checks.json` at the project root declares what must stay true — relative documentation links resolve, locale files carry the same keys, a layered source tree does not import outward or reach for host modules from an inner layer, no console logging where it does not belong. The engine runs them and reports every violation with a sentence you can act on. The boundaries belong to the project, not to the tool. See [docs/CHECKS.md](docs/CHECKS.md).
 
 **Keep a plugin under development out of the environment you work in.** Installing from a local directory is refused, with three deliberate exceptions: a published version, a host that is itself a sandbox, or an explicit decision by the user. The risk is asymmetric — a broken patch in a sandbox costs one restart, the same patch in the working profile costs a host that boots broken — so this is a guard, not advice.
@@ -162,7 +164,7 @@ This bundle is itself a development checkout, so it follows its own rule: instal
 From this checkout, with Plugin Manager (preferred — it also handles bundle selection):
 
 ```
-plugin_manager  action: install_bundle  target: E:\Workplace\extension\dsh-plugin-powerful
+plugin_manager  action: install_bundle  target: <path to this checkout>
 ```
 
 or from a shell in the profile:
@@ -206,7 +208,7 @@ $env:ELECTRON_RUN_AS_NODE = "1"
 Test a change in an isolated instance rather than in the desktop app; the `dsh-plugin-isolated-test` skill shipped with this bundle is the procedure, and the short version is:
 
 ```powershell
-$env:DSH_HOME = "E:\Workplace\extension\dsh-plugin-powerful\tmp\iso-home"   # reuse this home; do not recreate it per run
+$env:DSH_HOME = "<this checkout>\tmp\iso-home"   # reuse this home; do not recreate it per run
 dsh --profile iso-powerful --host 127.0.0.1 --port 3099 --no-open
 ```
 

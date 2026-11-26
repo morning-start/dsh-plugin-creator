@@ -29,9 +29,31 @@ README 讲能力，这个文件讲**具体是哪个工具、什么参数、边�
 输出：`{ ok, target, summary: { pass, warn, fail }, checks: [{ id, status, message }] }`。
 逐项给结论，不在第一个错误上抛异常。
 
-查这些：清单字段、`dsh.bundle.patch` 声明、locale / 图标导出、入口模块、详情文档、`files` 白名单、patch 里的相对模块名。
+查这些：清单字段、`dsh.bundle.patch` 声明、locale / 图标导出、入口模块、详情文档、`files` 白名单、patch 里的相对模块名，以及**隐私**与**安全**两组（见下）。
 
-**查不到**：YAML 语法错误（不按 YAML 解析 patch 文件）、运行时行为、客户端渲染。
+#### 隐私（默认开启，不需要项目声明）
+
+| 检查 | 级别 | 查什么 |
+|---|---|---|
+| `privacy:home-paths` | fail | `C:\Users\<name>`、`/Users/<name>`、`/home/<name>`——泄露作者账号 |
+| `privacy:credentials` | fail | 私钥头、`sk-`、`ghp_`、`github_pat_`、`AKIA`、`xox*`、`AIza` 形态的密钥 |
+| `privacy:machine-paths` | warn | 作者特有的绝对路径（暴露机器布局） |
+| `privacy:emails` | warn | 示例域之外的邮箱地址 |
+
+占位账号（`<user>`、`/Users/someone`、`/home/you` 这类）不算泄露——误报会教人忽略这条检查。
+
+#### 安全（默认开启）
+
+| 检查 | 级别 | 查什么 |
+|---|---|---|
+| `security:install-hooks` | fail | `preinstall` / `install` / `postinstall` / `prepare` / `prepack`——**安装时就在用户机器上执行** |
+| `security:dynamic-code` | fail | `eval`、`Function` 构造器、`vm` 沙箱（只查打包进去的代码文件） |
+| `security:shell-interpolation` | warn | `shell: true` 且命令串里有插值——值里带引号就能改命令 |
+| `security:capabilities` | warn | **能力清单**：能跑命令 / 开网络 / 写文件 / 读环境，逐个列出文件和位置 |
+
+最后一条是设计选择：**「会不会破坏」无法证明，但可以枚举**。一个会跑命令的插件不一定不安全，但审阅的人必须能看见它会跑命令、在哪跑。所以这一条只报告，不判死。
+
+**查不到**：YAML 语法错误（不按 YAML 解析 patch 文件）、运行时行为、客户端渲染、依赖供应链（不查第三方包漏洞）。
 
 ### `dsh_plugin_new`
 
@@ -149,6 +171,7 @@ README 讲能力，这个文件讲**具体是哪个工具、什么参数、边�
 | `scripts/try-sandbox.mjs` | 沙盒引擎（45 项，假启动器，不开真宿主） |
 | `scripts/try-release.mjs` | 发版检查（30 项：semver 子集、就绪检查、真实包面） |
 | `scripts/try-ui.mjs` | 真浏览器：断言、真实点击/输入、截图 PNG、console error 捕获 |
-| `scripts/try-checks.mjs` | 项目规则引擎（26 项：断链、locale 对齐、分层越界、console、checks 文件） |
+| `scripts/try-checks.mjs` | 项目规则引擎（37 项：断链、locale 对齐、分层越界、console、契约漂移、checks 文件） |
+| `scripts/try-audit.mjs` | 隐私与安全两组（29 项：账号路径、凭据、邮箱、机器路径、安装钩子、动态代码、能力清单） |
 | `scripts/check-patch.mjs` | `cordis.patch.yml` 与出货预设的漂移 |
 | `scripts/check-skills.mjs` | 技能 frontmatter（需 DSH 运行时的 YAML 库） |
