@@ -4,6 +4,8 @@
 
 它不是重写代码。规范化的判据只有一条：**这个项目能不能自己发现自己的问题，能不能按标准发版**。缺的是标准件，不是结构。
 
+两个入口，同一引擎：对话里用 `dsh_plugin_adopt`（默认只出计划），终端里用 CLI。
+
 ```powershell
 node scripts/adopt.mjs <目录>              # 只出计划（默认）
 node scripts/adopt.mjs <目录> --dry-run    # 看它要写什么，不写

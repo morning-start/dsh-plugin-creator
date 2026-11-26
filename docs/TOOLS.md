@@ -7,7 +7,7 @@ README 讲能力，这个文件讲**具体是哪个工具、什么参数、边�
 | 能力 | 工具 / 技能 | CLI |
 |---|---|---|
 | 从标准模板起一个插件包 | `dsh_plugin_new` + 技能 `dsh-plugin-new`（负责问询） | `scripts/new-bundle.mjs` |
-| 把已有插件补成标准项目 | —（只走 CLI：它改的是别人的目录） | `scripts/adopt.mjs` |
+| 把已有插件补成标准项目 | `dsh_plugin_adopt`（默认只出计划，`mode: apply` 才写） | `scripts/adopt.mjs` |
 | 把模糊需求变成插件形态 | 技能 `dsh-plugin-new` 的构思流程 + `references/conception.md`（内化的场景驱动方法，不依赖外部技能） | — |
 | 检查一个包为什么装不上 / 显示不出来 | `dsh_plugin_check` | `scripts/try-tool.mjs`（只测自身） |
 | 项目自己的规范检查（断链 / locale / 分层 / console） | `dsh_project_check` | `scripts/check-project.mjs` |

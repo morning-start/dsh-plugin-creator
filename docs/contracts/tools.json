@@ -1,8 +1,150 @@
 {
   "generatedBy": "scripts/gen-tools-contract.mjs",
   "note": "Generated from tools/index.js. Do not edit by hand; run the generator and commit the diff.",
-  "count": 6,
+  "count": 7,
   "tools": [
+    {
+      "name": "dsh_plugin_adopt",
+      "description": "Bring an existing DSH plugin project up to the standard without rewriting it. Audits the bundle and the standard files, then applies only the deterministic additions: a repository field from the git remote, the tag-driven release workflow, a starter checks.json containing only rules the project already passes, .gitignore entries, and a market.json draft. Never overwrites an existing file, refuses a dirty working tree, and is idempotent. Reports the decisions it will not make (which preset a tool belongs to, a leaked home path) and the manual items (preset patch drift). Defaults to a plan; pass mode \"apply\" to write.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string",
+            "description": "The plugin package directory. Defaults to the session working directory."
+          },
+          "mode": {
+            "type": "string",
+            "enum": [
+              "plan",
+              "apply"
+            ],
+            "description": "plan (default) reports only; apply writes the safe additions."
+          },
+          "force": {
+            "type": "boolean",
+            "description": "Write even when the working tree has uncommitted changes. Only when the project is yours and the plan has been read."
+          }
+        }
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "directory": {
+            "type": "string"
+          },
+          "mode": {
+            "type": "string",
+            "enum": [
+              "plan",
+              "apply"
+            ]
+          },
+          "bundle": {
+            "type": "object",
+            "properties": {
+              "pass": {
+                "type": "integer"
+              },
+              "warn": {
+                "type": "integer"
+              },
+              "fail": {
+                "type": "integer"
+              }
+            },
+            "required": [
+              "pass",
+              "warn",
+              "fail"
+            ]
+          },
+          "actions": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "path": {
+                  "type": "string"
+                },
+                "detail": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "id",
+                "path",
+                "detail"
+              ]
+            }
+          },
+          "decisions": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "detail": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "id",
+                "detail"
+              ]
+            }
+          },
+          "manual": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "detail": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "id",
+                "detail"
+              ]
+            }
+          },
+          "applied": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "skipped": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "blocked": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "directory",
+          "mode",
+          "bundle",
+          "actions",
+          "decisions",
+          "manual",
+          "applied",
+          "skipped"
+        ]
+      }
+    },
     {
       "name": "dsh_plugin_check",
       "description": "Check a DSH bundle directory for the structural problems that make installation, activation, or display fail: manifest fields, the declared bundle patch, exported locale and icon resources, the entry module, declared detail documents, and the packaged file whitelist. Read-only; it never changes the directory.",

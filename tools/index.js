@@ -17,6 +17,7 @@ import { readFile } from 'node:fs/promises'
 import { existsSync, readFileSync } from 'node:fs'
 import { isAbsolute, join, resolve } from 'node:path'
 import { inspectBundle } from '../lib/bundle-check.js'
+import { applyAdoption, auditProject, planAdoption } from '../lib/adopt.js'
 import { scaffold } from '../lib/scaffold.js'
 import { Sandboxes } from '../lib/sandbox.js'
 import { inspectRelease, packRelease, rehearseRelease } from '../lib/release.js'
@@ -37,6 +38,7 @@ export function apply(ctx) {
   ctx.effect(() => ctx.tools.register(sandboxTool(() => sessionDirectory(ctx))), 'dsh-plugin-creator/dsh_sandbox')
   ctx.effect(() => ctx.tools.register(releaseTool), 'dsh-plugin-creator/dsh_plugin_release')
   ctx.effect(() => ctx.tools.register(uiTool(() => sessionDirectory(ctx))), 'dsh-plugin-creator/dsh_plugin_ui')
+  ctx.effect(() => ctx.tools.register(adoptTool(() => sessionDirectory(ctx))), 'dsh-plugin-creator/dsh_plugin_adopt')
   ctx.effect(() => ctx.tools.guard(localInstallGuard), 'dsh-plugin-creator/no-local-install')
 }
 
@@ -164,6 +166,134 @@ function sessionDirectory(ctx) {
  * resolve, locale files agree, a layered tree does not import outward — and the
  * engine runs them. Boundaries live with the project that owns them.
  */
+/**
+ * Normalise an existing plugin project: audit, plan, and apply only the
+ * deterministic additions. A plan is the default because normalising someone's
+ * project is an action, not a side effect of asking what would happen.
+ */
+function adoptTool(defaultDirectory) {
+  return {
+    name: 'dsh_plugin_adopt',
+    description:
+      'Bring an existing DSH plugin project up to the standard without rewriting it. Audits the bundle and the standard files, then applies only the deterministic additions: a repository field from the git remote, the tag-driven release workflow, a starter checks.json containing only rules the project already passes, .gitignore entries, and a market.json draft. Never overwrites an existing file, refuses a dirty working tree, and is idempotent. Reports the decisions it will not make (which preset a tool belongs to, a leaked home path) and the manual items (preset patch drift). Defaults to a plan; pass mode "apply" to write.',
+    parameters: {
+      type: 'object',
+      properties: {
+        path: { type: 'string', description: 'The plugin package directory. Defaults to the session working directory.' },
+        mode: {
+          type: 'string',
+          enum: ['plan', 'apply'],
+          description: 'plan (default) reports only; apply writes the safe additions.',
+        },
+        force: {
+          type: 'boolean',
+          description: 'Write even when the working tree has uncommitted changes. Only when the project is yours and the plan has been read.',
+        },
+      },
+    },
+    output: {
+      schema: {
+        type: 'object',
+        properties: {
+          directory: { type: 'string' },
+          mode: { type: 'string', enum: ['plan', 'apply'] },
+          bundle: {
+            type: 'object',
+            properties: {
+              pass: { type: 'integer' },
+              warn: { type: 'integer' },
+              fail: { type: 'integer' },
+            },
+            required: ['pass', 'warn', 'fail'],
+          },
+          actions: {
+            type: 'array',
+            items: {
+              type: 'object',
+              properties: {
+                id: { type: 'string' },
+                path: { type: 'string' },
+                detail: { type: 'string' },
+              },
+              required: ['id', 'path', 'detail'],
+            },
+          },
+          decisions: {
+            type: 'array',
+            items: {
+              type: 'object',
+              properties: { id: { type: 'string' }, detail: { type: 'string' } },
+              required: ['id', 'detail'],
+            },
+          },
+          manual: {
+            type: 'array',
+            items: {
+              type: 'object',
+              properties: { id: { type: 'string' }, detail: { type: 'string' } },
+              required: ['id', 'detail'],
+            },
+          },
+          applied: { type: 'array', items: { type: 'string' } },
+          skipped: { type: 'array', items: { type: 'string' } },
+          blocked: { type: 'string' },
+        },
+        required: ['directory', 'mode', 'bundle', 'actions', 'decisions', 'manual', 'applied', 'skipped'],
+      },
+      render: (_args, value) => [{ type: 'text', text: renderAdoption(value) }],
+    },
+    async execute(args) {
+      const directory = args.path === undefined ? defaultDirectory() : String(args.path)
+      const audit = await auditProject(directory)
+      const plan = await planAdoption(directory, audit)
+      const mode = args.mode === 'apply' ? 'apply' : 'plan'
+      let applied = []
+      let skipped = []
+      if (mode === 'apply') {
+        const result = await applyAdoption(directory, plan, { force: args.force === true })
+        applied = result.applied.map(item => `${item.id} (${item.path})`)
+        skipped = result.skipped.map(item => `${item.id} (${item.path}): ${item.reason}`)
+      }
+      return {
+        directory,
+        mode,
+        bundle: audit.bundle.summary,
+        actions: plan.actions.map(action => ({ id: action.id, path: action.path, detail: action.detail })),
+        decisions: plan.decisions,
+        manual: plan.manual,
+        applied,
+        skipped,
+        ...(plan.blocked === undefined ? {} : { blocked: plan.blocked }),
+      }
+    },
+  }
+}
+
+function renderAdoption(value) {
+  const lines = [
+    `${value.directory} — bundle ${value.bundle.pass} pass, ${value.bundle.warn} warn, ${value.bundle.fail} fail`,
+  ]
+  if (value.blocked !== undefined) lines.push(`blocked: ${value.blocked}`)
+  if (value.actions.length === 0) lines.push('nothing to add: the standard files are already there')
+  else {
+    lines.push(value.mode === 'apply' ? 'added:' : 'would add:')
+    for (const action of value.actions) lines.push(`  auto   ${action.id.padEnd(18)} ${action.detail}`)
+  }
+  if (value.decisions.length > 0) {
+    lines.push('needs a decision (not touched):')
+    for (const item of value.decisions) lines.push(`  decide ${item.id.padEnd(18)} ${item.detail}`)
+  }
+  if (value.manual.length > 0) {
+    lines.push('report only:')
+    for (const item of value.manual) lines.push(`  manual ${item.id.padEnd(18)} ${item.detail}`)
+  }
+  for (const line of value.skipped) lines.push(`  = ${line}`)
+  if (value.mode === 'apply' && value.applied.length > 0) {
+    lines.push('', 'next: run dsh_project_check on the project, then review git diff before committing')
+  }
+  return lines.join('\n')
+}
+
 const projectCheck = {
   name: 'dsh_project_check',
   description:

@@ -37,7 +37,7 @@ const ctx = {
 
 apply(ctx)
 const names = [...registered.keys()].sort()
-if (names.length !== 6) throw new Error(`expected 6 tools, got ${names.join(', ') || 'none'}`)
+if (names.length !== 7) throw new Error(`expected 7 tools, got ${names.join(', ') || 'none'}`)
 if (guards.length !== 1) throw new Error(`expected 1 guard, got ${guards.length}`)
 console.log(`registered: ${names.join(', ')} (+1 guard)\n`)
 
@@ -96,6 +96,16 @@ console.log(`dsh_plugin_ui: ${uiClose.summary}`)
 const project = registered.get('dsh_project_check')
 const projectReport = await project.execute({ path: repo }, {})
 if (projectReport.ok !== true) {
+  // dsh_plugin_adopt: a plan on this repository must find nothing to write, and
+  // must not have written anything.
+  const adopt = tools.get('dsh_plugin_adopt')
+  const adoptPlan = await adopt.execute({ path: repo })
+  if (adoptPlan.mode !== 'plan') throw new Error(`dsh_plugin_adopt defaulted to ${adoptPlan.mode}, expected plan`)
+  if (adoptPlan.applied.length !== 0) throw new Error(`dsh_plugin_adopt applied ${adoptPlan.applied.length} change(s) in plan mode`)
+  if (adoptPlan.actions.length !== 0) throw new Error(`dsh_plugin_adopt wants to add ${JSON.stringify(adoptPlan.actions.map(a => a.id))} to this repository`)
+  const adoptApplied = await adopt.execute({ path: repo, mode: 'apply' })
+  if (adoptApplied.applied.length !== 0) throw new Error(`dsh_plugin_adopt wrote ${adoptApplied.applied.length} change(s) into a clean repository`)
+
   throw new Error(`dsh_project_check on this repo: ${JSON.stringify(projectReport.checks.filter(item => item.status !== 'pass'))}`)
 }
 console.log(`dsh_project_check: ${projectReport.summary.pass} pass from ${projectReport.source.split(/[\\/]/).pop()}`)
