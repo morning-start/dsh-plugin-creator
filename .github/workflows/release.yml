@@ -34,6 +34,9 @@ jobs:
           # The LTS alias keeps this file from going stale every October; the
           # package has no dependencies, so any supported Node runs the checks.
           node-version: lts/*
+          # Writes an .npmrc that reads ${NODE_AUTH_TOKEN}. Without it, npm ignores
+          # the token and fails with ENEEDAUTH no matter what the secret holds.
+          registry-url: https://registry.npmjs.org
 
       - name: The tag must match package.json
         run: |
