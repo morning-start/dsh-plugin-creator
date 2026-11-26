@@ -1,244 +1,247 @@
 # dsh-plugin-creator
 
-A plugin-development toolkit for DeepSeek Harness (DSH). Installing it extends **Creator mode (创造模式, the `cordis` preset)** and nothing else; removing it takes everything back out.
+一个给 DeepSeek Harness（DSH）用的插件开发增强包。装上它只扩展 **创造模式**（`cordis` 预设），别的一概不动；卸载时把它加的东西全部带走。
 
-## What this project is
+## 这是什么
 
-An agent-era scaffolding toolkit for DSH plugins. A plugin's life runs **构思 → 项目启动 → 规范化开发与检查 → 功能测试 → 集成测试 → 发版**; this package makes the mechanical parts of that cycle stable and fast, and leaves the judgment to skills and conversation.
+一个面向 agent 时代的 DSH 插件脚手架工具箱。一个插件的生命周期是 **构思 → 项目启动 → 规范化开发与检查 → 功能测试 → 集成测试 → 发版**；这个包让其中机械的部分稳定、快，把判断留给 skill 和对话。
 
-Where it stands today, stated plainly: **project start**, **normalized checks**, **functional testing**, **client UI checks**, and **release checks** are in place; **conception** (turning a need into a plugin shape) is still just conversation. The gap list is deliberate — it is the roadmap.
+诚实地说现状：**项目启动**、**规范化检查**、**功能测试**、**客户端 UI 检查**、**发版检查** 都已经成形；**构思**（把需求变成一个插件形态）还只是对话。这份差距清单是刻意的——它就是路线图。
 
-The first design rule: **Creator mode's own tools are this plugin's foundation.** Before adding anything, read what the preset already ships (`dsh --profile <p> --dump-config`, `cordis_inspect_*`) instead of re-implementing it. Installing and enabling is `plugin_manager`'s job; runtime truth comes from Inspect, not from reading source; anything that is judgment belongs in a skill. The full statement — the six-stage capability table with its gaps, the 32 shipped plugins grouped by what each means for the design, and the four design principles — is in [docs/PHILOSOPHY.md](docs/PHILOSOPHY.md) (Chinese).
+第一条设计原则：**创造模式自带的工具是这个插件的地基。** 加东西之前，先看这个预设已经装了什么（`dsh --profile <p> --dump-config`、`cordis_inspect_*`），而不是重新实现一遍。安装与启用是 `plugin_manager` 的事；运行时的真相来自 Inspect，不是读源码；凡是判断，都属于 skill。完整论述——六段能力表及其缺口、32 个出厂插件按「对本设计意味着什么」的分组、四条设计原则——在 [docs/PHILOSOPHY.md](docs/PHILOSOPHY.md)。
 
-## What it gives you
+## 它给你什么
 
-Capabilities, not a feature list. Which tool implements which capability — with its parameters, actions, and limits — is in [docs/TOOLS.md](docs/TOOLS.md).
+讲能力，不讲功能清单。哪个工具实现了哪条能力——参数、动作、边界——在 [docs/TOOLS.md](docs/TOOLS.md)。
 
-**Start a plugin from a standard template.** One call produces the manifest, the bundle patch, the entry module, locale dictionaries, an icon, a README, and optionally an example tool and a skill. Deterministic: the same input always produces the same files. It validates its own output before returning, so the structural report arrives in the same turn as the plugin.
+**从标准模板起一个插件。** 一次调用产出清单、bundle patch、入口模块、多语言字典、图标、README，按需附带示例工具和 skill。确定性：同样的输入永远产出同样的文件。返回之前它会先自检，所以结构报告和插件在同一轮里到齐。
 
-**Know why a package will not install or will not show up.** A read-only structural check reports every problem it finds instead of throwing on the first one: manifest fields, the declared bundle patch, exported locale and icon resources, the entry module, the declared detail document, the packaging whitelist. Each check is pass / warn / fail.
+**知道一个包为什么装不上、显示不出来。** 只读的结构检查把所有问题一次报完，而不是遇到第一个就抛：清单字段、声明的 bundle patch、导出的 locale 与图标资源、入口模块、声明的详情文档、打包白名单。每项给 pass / warn / fail。
 
-**Deliver a package that carries nothing of yours and shows what it can do.** The same check looks for the author's own account paths and credential shapes — a private key, an API token, a home directory — and fails on them, while placeholder accounts in examples stay quiet. It refuses install-time hooks and dynamic code evaluation, and it prints the plugin's capability inventory: which files run commands, open connections, write files, or read the environment. That last part is a report rather than a verdict, because "will not break anything" cannot be proven by a static check — but what a plugin *can* do can be listed, and a reviewer deserves to see it.
+**交付一个不夹带你私人信息、并且敢说自己能干什么的包。** 同一个检查会找作者自己的账号路径与凭据形态——私钥、API token、家目录——发现就 fail；而示例里的占位账号保持安静。它拒绝安装期钩子和动态代码求值，并打印插件的**能力清单**：哪些文件会跑命令、开连接、写文件、读环境。最后这条是报告不是判决，因为「不会搞坏任何东西」无法用静态检查证明——但一个插件**能做什么**可以列出来，审阅的人应该看得到。
 
-**Enforce the project's own boundaries as rules.** A `checks.json` at the project root declares what must stay true — relative documentation links resolve, locale files carry the same keys, a layered source tree does not import outward or reach for host modules from an inner layer, no console logging where it does not belong. The engine runs them and reports every violation with a sentence you can act on. The boundaries belong to the project, not to the tool. See [docs/CHECKS.md](docs/CHECKS.md).
+**把项目自己的边界写成规则。** 项目根的 `checks.json` 声明什么必须一直成立——相对文档链接可解析、多语言文件 key 一致、分层源码树不向外 import、不在内层碰宿主模块、不该打日志的地方没有 console。引擎跑完逐条报告，每句都能照着改。边界属于项目，不属于工具。见 [docs/CHECKS.md](docs/CHECKS.md)。
 
-**Keep a plugin under development out of the environment you work in.** Installing from a local directory is refused, with three deliberate exceptions: a published version, a host that is itself a sandbox, or an explicit decision by the user. The risk is asymmetric — a broken patch in a sandbox costs one restart, the same patch in the working profile costs a host that boots broken — so this is a guard, not advice.
+**让开发中的插件进不了你在用的环境。** 从本地目录安装会被拒绝，只有三种有意的例外：已发布的版本、本身就是一个沙盒的宿主、或者用户明确决定。风险是不对称的——沙盒里一个坏 patch 的代价是一次重启，同样的 patch 落在工作 profile 上，代价是一个起不来的宿主。所以这是守卫，不是建议。
 
-**Test a plugin in a sandbox instead of the desktop app.** A project can hold several isolated instances — daily iteration, a clean reproduction, client UI states, a rollback rehearsal — each with its own home, profile, port, and workspace copy. They are reused rather than rebuilt, they carry a marker so one project's sandbox cannot be adopted by another, and they can be launched, probed over HTTP, seeded with real data, and stopped without touching anything the user is running.
+**在沙盒里测插件，而不是在桌面端。** 一个项目可以有多个隔离实例——日常迭代、干净复现、客户端 UI 状态、回滚演练——每个有自己的 home、profile、端口、工作区副本。它们被复用而不是重建，带一个标记，使一个项目的沙盒不会被另一个项目误接管；可以启动、按 HTTP 探活、灌入真实数据、停掉，全程不碰用户正在跑的东西。
 
-**See the page, and assert on it.** A headless browser is driven over the DevTools Protocol against the sandbox: real screenshots, assertions on selectors, text, expressions and console errors, and real clicks and typing — not a synthetic `element.click()`, which React inputs and contenteditable ignore. The session token is taken from the sandbox's own log, so no one has to hunt it out of a URL. A screenshot proves what rendered; assertions prove what must be true; neither replaces a human on look and feel. See [docs/UI.md](docs/UI.md).
+**看见页面，并对它断言。** 用无头浏览器经 DevTools 协议打沙盒：真实截图，对选择器、文案、表达式、console 报错断言，真实点击与输入——不是合成的 `element.click()`，React 输入框和 contenteditable 会忽略那种。会话 token 从沙盒自己的日志里取，不用谁去 URL 里翻。截图证明渲染成什么样，断言证明什么必须成立，两者都不能代替人判断观感。见 [docs/UI.md](docs/UI.md)。
 
-**Generate any structured content from a template.** The plugin scaffold is one instance of a general capability: a scheme is data (variables, file mapping, conditions, rules) plus templates, so a new scheme is a directory rather than a new generator. See [docs/SCHEMES.md](docs/SCHEMES.md).
+**从模板生成任何结构化内容。** 插件脚手架只是一条通用能力的一个实例：一个**方案**是数据（变量、文件映射、条件、规则）加模板，所以新方案是一个目录，而不是一个新生成器。见 [docs/SCHEMES.md](docs/SCHEMES.md)。
 
-**Ship a release you have already installed once.** A readiness check asks the packer what would actually ship — not what `files` claims — and compares the package's `engines.dsh` with the running DSH, so a version mismatch is caught before installation rather than during it. A rehearsal then packs the tarball, installs it into a sandbox, and reads the composed config back, handing you the rollback command in the same breath. Publishing stays a human decision: the tool reports whether it would be safe and what to run. See [docs/RELEASE.md](docs/RELEASE.md).
+**发一个你已经装过一次的版。** 就绪检查去问打包器**真实**会装进 tarball 的东西——不是 `files` 声称的——并拿包的 `engines.dsh` 和运行中的 DSH 比对，于是版本不匹配在安装前就被发现，而不是安装时。演练随后打包、装进沙盒、把组合后的配置读回来，顺手给你回滚命令。发布仍然是人的决定：工具只报「能不能发、该跑什么」。见 [docs/RELEASE.md](docs/RELEASE.md)。
 
-**Judgment where it belongs.** Two skills carry what a tool cannot: which questions to ask before generating a plugin, and how to test one without producing fake evidence.
+**判断放在该放的地方。** 两个 skill 承载工具不该编码的东西：生成插件前该问什么，以及怎么测一个插件而不产出假证据。
 
-Everything is mounted inside the Creator-mode preset, so a Standard, PTC, Minimal, or Data-analysis session sees nothing new.
+一切都挂在创造模式预设里，所以标准、PTC、极简、数据分析会话看不到任何新增。
 
-## Schemes: template + config + command
+## 方案：模板 + 配置 + 命令
 
-Generating a plugin is one instance of a general capability, so it is built as one. A **scheme** is a directory holding a `recipe.json` (variables, file mapping, conditions, rules), its templates (one file per variant), and — only where something must be computed — a small module of `derive` hooks:
+生成插件是一条通用能力的实例，所以就这么建。一个**方案**是一个目录：`recipe.json`（变量、文件映射、条件、规则）、它的模板（每个变体一个文件），以及——只在需要计算时才有的——一小段 `derive` 钩子：
 
 ```
 templates/bundle/
-  recipe.json          variables, files, when-clauses, rules, warnings
-  *.tpl                one file per variant; never evaluated as code
-lib/generate.js        the generic engine: variables → files → rules
-lib/rules.js           declarative structure checks
-lib/scaffold.js        the bundle scheme: derive hooks + the deep bundle check
+  recipe.json          变量、文件、when 条件、规则、警告
+  *.tpl                每个变体一个文件；永远不当作代码求值
+lib/generate.js        通用引擎：变量 → 文件 → 规则
+lib/rules.js           声明式结构检查
+lib/scaffold.js        bundle 方案：derive 钩子 + 深度 bundle 检查
 ```
 
-The engine knows nothing about plugins. That is what makes a new scheme a directory instead of a new generator: describe the variables, map the files, declare the invariants, and the existing entry points drive it unchanged.
+引擎对「插件」一无所知。这正是「新方案是一个目录而不是一个新生成器」的由来：描述变量、映射文件、声明不变量，已有的入口原样驱动它。
 
-Three properties are enforced rather than documented, because they are what makes generators untrustworthy:
+三条性质是**强制**而不是写在文档里，因为正是它们决定生成器可不可信：
 
-- **Selection, not conditionals** — a variant is a different template file chosen by a `when` clause, so templates stay readable text and the choice logic is visible in one place.
-- **Unresolved placeholders are fatal** — a leftover `{{token}}` means the recipe and the template disagree; failing beats shipping half a file.
-- **Rules run on the output** — `placeholder-free`, `files-listed` (every generated file must be inside `package.json` `files`), `json-field`, `frontmatter-name`. The bundle's own rules already caught a real bug: `.gitignore` and `.gitattributes` were generated but not marked as local-only, so they showed up as uncovered package content.
+- **选择，不是条件分支** —— 一个变体就是一个不同的模板文件，由 `when` 子句挑；模板保持可读的文本，选择逻辑集中在一处可见。
+- **未解析的占位符是致命错误** —— 剩下一个 `{{token}}` 意味着 recipe 和模板不一致；失败好过发出去半个文件。
+- **规则跑在产物上** —— `placeholder-free`、`files-listed`（每个生成的文件都必须在 `package.json` 的 `files` 里）、`json-field`、`frontmatter-name`。bundle 自己的规则已经抓到过一个真 bug：`.gitignore` 和 `.gitattributes` 被生成出来，却没标成本地文件，于是显示为「未被打包覆盖」。
 
-JSON is rendered from a template too, with `{{name|json}}` for escaping, so "what gets generated" has exactly one source of truth.
+JSON 也由模板渲染，用 `{{name|json}}` 转义，于是「生成什么」只有一个真相来源。
 
-The full format — every variable field, the `when` grammar, the rule types, and how to add a scheme — is in [docs/SCHEMES.md](docs/SCHEMES.md).
+完整格式——每个变量字段、`when` 语法、规则类型、怎么加一个方案——见 [docs/SCHEMES.md](docs/SCHEMES.md)。
 
-## Why a layer split, and not one entry point
+## 为什么分层，而不是一个入口
 
-Filling a template is deterministic string work; interviewing a user is judgment. Mixing them is what makes template generators unreliable, so every capability here is built the same way:
+填模板是确定性的字符串工作；访谈用户是判断。把两者混在一起，正是模板生成器不可靠的原因，所以这里每条能力都按同一个形状建：
 
-- **an engine** (`lib/`) — pure, dependency-free, testable, with no idea what a plugin is;
-- **a scheme** (`templates/`) — the structure as data: variables, file mapping, conditions, rules;
-- **two fronts** — an agent-facing tool and a human-facing CLI over the same engine, so neither has to re-implement it;
-- **a skill** — the judgment the engine must not encode: what to ask, what to decide, what counts as verified.
+- **引擎**（`lib/`）—— 纯粹、无依赖、可测，不知道插件是什么；
+- **方案**（`templates/`）—— 把结构当数据：变量、文件映射、条件、规则；
+- **两个前台** —— 面向 agent 的工具和面向人的 CLI，共用同一个引擎，谁都不用重写一遍；
+- **一个 skill** —— 引擎不该编码的判断：问什么、定什么、什么算验证过。
 
-The tool front is not decoration: it is what makes the automation work outside this repository (the project root comes from the session, not from this package) and what makes it independent of PATH (the launcher is derived from the Host executable). The sandbox follows the same shape with one layer fewer — it renders no files, so a template layer would be ceremony.
+工具前台不是装饰：它让自动化在这个仓库之外也成立（项目根来自会话，不来自本包），也让它不依赖 PATH（启动器从宿主可执行文件推导）。沙盒是同一个形状少一层——它不渲染文件，加模板层只是仪式。
 
-Selection, not template logic: the template directory holds one file per variant (`index.js.tpl` vs `index.min.js.tpl`, `cordis.patch.yml.tpl` vs `cordis.patch.skill.yml.tpl`), and the engine picks files. Unresolved `{{placeholders}}` after rendering are an error, so a typo in a template fails loudly instead of shipping.
+选择而不是模板逻辑：模板目录每个变体一个文件（`index.js.tpl` 与 `index.min.js.tpl`，`cordis.patch.yml.tpl` 与 `cordis.patch.skill.yml.tpl`），引擎挑文件。渲染后仍有未解析的 `{{占位符}}` 就是错误，模板里的笔误因此大声失败，而不是发出去。
 
-A DSH slash command (`/new-plugin`) is deliberately not included: `commands.register` exists and would be cheap, but a command receives one line of `rawInput`, and the fields here need a conversation — a command would either force `name=... title=...` syntax or just inject a prompt, which is what talking to the agent already does.
+故意**没有**做 DSH 斜杠命令（`/new-plugin`）：`commands.register` 是存在的，做起来也便宜，但命令只收到一行 `rawInput`，而这里的字段需要对话——命令要么强迫你写 `name=... title=...`，要么只是注入一段提示，而后者跟直接跟 agent 说话没区别。
 
-### Generate one
+### 生成一个
 
-Ask the agent in Creator mode for a plugin and it will interview you first; or drive the engine from a plan file. Invocations, fields, and flags are in [docs/TOOLS.md](docs/TOOLS.md).
+在创造模式里跟 agent 说要一个插件，它会先访谈你；或者从计划文件直接驱动引擎。调用方式、字段、参数在 [docs/TOOLS.md](docs/TOOLS.md)。
 
-The generated bundle's patch inserts one Host row and patches no preset, so installing it changes no existing preset's composition. Its README documents the two ways to scope a tool or skill to a single preset instead.
+生成出来的 bundle 的 patch 只插入一行 Host 行，不覆写任何预设，所以装上它不改变任何已有预设的组合。它的 README 记录了把工具或 skill 限定到单个预设的两种写法。
 
-## Sandboxes
+## 沙盒
 
-Testing a plugin means running a `dsh web` instance that is not the user's desktop app. This package ships the register that makes that repeatable:
+测插件意味着跑一个**不是用户桌面端**的 `dsh web` 实例。这个包提供让这件事可重复的登记表：
 
 ```
-<project>/tmp/sandboxes/
+<项目>/tmp/sandboxes/
   registry.json            name → home / workspace / profile / port
   default/
-    sandbox.json           marker: which project and sandbox this folder is
-    home/                  the sandbox's DSH_HOME
-    workspace/             the copy sessions actually run in
-    open.log               output of `open --run`; the URL is read from here
+    sandbox.json           标记：这个文件夹属于哪个项目、哪个沙盒
+    home/                  沙盒的 DSH_HOME
+    workspace/             会话实际运行的工作区副本
+    open.log               `open --run` 的输出；URL 从这里读
 ```
 
-One project holds as many sandboxes as it needs — `default` for daily iteration, `clean` for a from-scratch reproduction, `client` for UI states, `rollback` for rehearsing a rollback. All of them are **reused**, never recreated implicitly: the pnpm install, the profile's plugin versions, and the model credentials live in the sandbox home.
+一个项目想放多少沙盒就放多少——`default` 日常迭代、`clean` 从零复现、`client` 看 UI 状态、`rollback` 演练回滚。它们全部**复用**，从不隐式重建：pnpm 安装、profile 里的插件版本、模型凭据都在沙盒 home 里。
 
-Sandboxes live under the project's own `tmp/`, never in `~/.dsh` or a system temp directory, so they travel with the project and disappear with it. `sandbox.json` is the identity check: its `project` must be this project's root, and every operation refuses a folder whose marker says otherwise — a copied sandbox cannot be adopted by another project by accident. Ports are unique within the project register, so two stopped sandboxes never claim the same port. The page's workspace title reads `sandbox <project>/<name>`, which is how you tell several running sandboxes apart.
+沙盒放在项目自己的 `tmp/` 下，绝不在 `~/.dsh` 或系统临时目录，所以它跟着项目走、跟着项目消失。`sandbox.json` 是身份检查：它的 `project` 必须是这个项目的根，任何操作都拒绝标记不符的文件夹——被复制的沙盒不会被另一个项目误接管。端口在项目登记表内唯一，所以两个停掉的沙盒不会抢同一个端口。页面上的工作区标题读作 `sandbox <项目>/<沙盒>`，这是区分多个运行中沙盒的办法。
 
-Three behaviours come from real failures on a plugin UI project:
+三条行为来自一个插件 UI 项目上的真实事故：
 
-- **A port is not an identity.** Launching records the pid that actually listens, and stopping kills only that pid — a stranger holding the port is reported and left alone. Killing "whatever holds the port" once took the user's desktop app down with it.
-- **Contract checks carry the session token.** Routes are requested with the token the sandbox parsed from its own log, so 401 / 400 / 404 / 405 can be checked without hunting a token out of a page URL; the token is redacted from anything returned.
-- **Seeding beats an empty home.** An isolated home is empty, so every panel shows an empty state and the interesting rendering is never exercised; named entries can be copied in from the real `~/.dsh`, read-only on the source. Model credentials can be copied too, and the result says so — borrowed credentials are not verified credentials.
+- **端口不是身份。** 启动时记下真正监听的 pid，停止时只杀那个 pid——占着端口的陌生进程会被报告并放过。曾经「谁占端口就杀谁」，把用户的桌面端一起杀了。
+- **契约检查带着会话 token。** 请求路由时用沙盒从自己日志里解析出的 token，于是 401 / 400 / 404 / 405 不用去页面 URL 里翻 token 就能查；返回的任何内容里 token 都被脱敏。
+- **灌数据胜过空 home。** 隔离的 home 是空的，于是每个面板都显示空状态，最有意思的渲染永远没被跑过；可以从真实的 `~/.dsh` 里只读地复制具名条目进来。模型凭据也可以复制，并且结果会说明——借来的凭据不算验证过的凭据。
 
-**Model credentials stay with the user.** A sandbox starts with only a browser-session record in `.credentials.yaml`; the page then says "choose a model" and nothing sends. The user adds one once in Settings → Models, it lands in that sandbox's home, and every later run reuses it — no script copies the user's credentials around. The register reports `model: yes / no` by reading record names, because the file is never empty in this DSH version (~160 bytes of skeleton even with no model).
+**模型凭据留在用户手里。** 沙盒启动时 `.credentials.yaml` 里只有一条浏览器会话记录，于是页面显示「请选择模型」，发不出消息。用户在 Settings → Models 里加一次，它落在这个沙盒的 home 里，之后每次运行都复用——没有任何脚本去搬用户的凭据。登记表按记录名报告 `model: yes / no`，因为在这个 DSH 版本里这个文件从不为空（没有模型时也有约 160 字节的骨架）。
 
-Commands, actions, and flags for all of this: [docs/TOOLS.md](docs/TOOLS.md).
+命令、动作、参数见 [docs/TOOLS.md](docs/TOOLS.md)。
 
-## A plugin under development never lands in the current environment
+## 开发中的插件永远不会落进当前环境
 
-Installing a local bundle is refused — whether through Plugin Manager or through a shell `dsh plugin … add` with a path or `link:` — with three deliberate exceptions: a registry spec (`name@version`), because publishing is the sanctioned way to ship; a host that **is** a sandbox (its `DSH_HOME` sits under a folder carrying `sandbox.json`, or under `tmp/sandboxes/`), where installing is the whole point; and an explicit user decision, expressed as `DSH_ALLOW_LOCAL_PLUGIN_INSTALL=1` on the host before a restart.
+本地 bundle 的安装会被拒绝——不管是通过 Plugin Manager 还是 shell 里的 `dsh plugin … add` 带路径或 `link:`——只有三种有意的例外：registry 形式（`name@version`），因为发布才是正规的交付方式；**本身是沙盒**的宿主（`DSH_HOME` 位于带 `sandbox.json` 的文件夹下，或在 `tmp/sandboxes/` 下），那里安装正是目的；以及用户的明确决定，表现为重启前在宿主上设 `DSH_ALLOW_LOCAL_PLUGIN_INSTALL=1`。
 
-The reasoning is asymmetric risk: a broken patch in a sandbox costs one restart, and the same patch in the profile the user actually works in means a host that boots with a broken composition. A guard, rather than a rule in a skill, because a rule is advice the model may skip under pressure.
+理由是不对称风险：沙盒里一个坏 patch 的代价是一次重启，而在用户真正工作的 profile 里，同样的 patch 意味着一个带着坏组合启动的宿主。做成守卫而不是 skill 里的一条规则，因为规则是建议，模型在压力下可以跳过。
 
-Limits, stated plainly: it does not cover a human typing `dsh plugin add` in their own terminal, and it is not a security boundary — it is an accident brake. The exact matcher is in [docs/TOOLS.md](docs/TOOLS.md).
+说清边界：它不覆盖用户在自己终端里手敲 `dsh plugin add`，它也不是安全边界——它是防误撞的刹车。确切的匹配逻辑在 [docs/TOOLS.md](docs/TOOLS.md)。
 
-## How "Creator mode only" is implemented
+## 「只在创造模式」是怎么实现的
 
-The bundle patch (`cordis.patch.yml`) overrides the shipped `preset-cordis` row and appends two rows to its plugin list:
+bundle patch（`cordis.patch.yml`）覆写出厂的 `preset-cordis` 行，并在它的插件列表末尾追加两行：
 
-- `creator-tools` → `dsh-plugin-creator/tools`, which registers `dsh_plugin_check` on the preset's context;
-- `creator-skills` → a second `@deepseek-ai/dsh-skill-filesystem` provider with `includeDefaultRoots: false` and `customSkillDirs` pointing at this package's `skills/` directory.
+- `creator-tools` → `dsh-plugin-creator/tools`，在这个预设的上下文里注册工具；
+- `creator-skills` → 第二个 `@deepseek-ai/dsh-skill-filesystem` 提供者，`includeDefaultRoots: false`，`customSkillDirs` 指向本包的 `skills/` 目录。
 
-The patch also inserts one Host row, `creator-host`, which registers nothing today and exists so the bundle has a stable identity row in Plugin Manager.
+patch 还插入一行 Host 行 `creator-host`，它今天不注册任何东西，存在的意义是让这个 bundle 在 Plugin Manager 里有一个稳定的身份行。
 
-Uninstalling removes the whole patch layer, so `preset-cordis` falls back to the declaration shipped in `@deepseek-ai/dsh-web-app` and the tools and skills disappear with it. No other preset is patched or restated.
+卸载会移除整个 patch 层，于是 `preset-cordis` 回落到 `@deepseek-ai/dsh-web-app` 里出厂的声明，工具和 skill 一并消失。其他预设既没有被 patch，也没有被复述。
 
-### The cost of this approach, stated plainly
+### 这个做法的代价，说清楚
 
-A patch replaces a row's `config` wholesale — patches never deep-merge, and a preset's `plugins` is inside `config`. There is no "append to an existing preset" mechanism. So the override restates the entire shipped plugin list, marked in the patch file between `# --- shipped preset-cordis ---` and `# --- end shipped ---`.
+patch 会**整体替换**一行的 `config`——补丁从不深合并，而预设的 `plugins` 就在 `config` 里。DSH 没有「往已有预设里追加」的机制。所以这次覆写必须把出厂的插件列表整段复述，在 patch 文件里标在 `# --- shipped preset-cordis ---` 与 `# --- end shipped ---` 之间。
 
-Consequence: **after upgrading DSH, re-copy that block** from `@deepseek-ai/dsh-web-app/presets/cordis.patch.yml` (the block was copied from DSH 0.2.2-rc.5). If the new DSH adds a row to Creator mode, this bundle would otherwise hide it. A generator/check script for that block is the next item on the roadmap.
+后果：**升级 DSH 之后要重新复制那一段**，来自 `@deepseek-ai/dsh-web-app/presets/cordis.patch.yml`（当前这段复制自 DSH 0.2.2-rc.5）。如果新版 DSH 给创造模式加了一行，这个 bundle 会把它盖住。给这段做生成/检查脚本是路线图上的下一项。
 
-A second consequence worth knowing: if a user later edits Creator mode in the Web UI's preset editor, that editor writes its own full override into the profile patch, which wins over this bundle's layer. The tools and skills then disappear until the user re-adds them or the profile override is removed.
+还有一个后果值得知道：如果用户之后在 Web UI 的预设编辑器里改了创造模式，那个编辑器会往 profile patch 里写它自己的一整份覆写，优先级高于本 bundle 的层。工具和 skill 会消失，直到用户重新加回去或删掉那份 profile 覆写。
 
-## Structure
-
-```
-package.json          bundle manifest: exports, files, dsh.bundle.patch
-cordis.patch.yml      the patch layer: Host row + Creator-mode preset override
-index.js              Host half (registers nothing yet; future shared services)
-tools/index.js        preset-scoped half: the three tools and the install guard
-lib/bundle-check.js   the structural checker (shared by both tools)
-lib/generate.js       the generic template engine (recipe → files → rules)
-lib/rules.js          declarative structure checks
-lib/scaffold.js       the bundle scheme (derive hooks + the deep check)
-lib/sandbox.js        the sandbox engine (shared by the tool and the CLI)
-templates/bundle/     the bundle scheme: recipe.json, one template per variant
-skills/               skills mounted into Creator mode
-locale/{en,zh}.json   Plugin Manager title / description / detail path
-docs/                 design docs (philosophy, schemes, tools) + detail page
-icon.svg              plugin icon
-scripts/              CLIs and the regression checks
-```
-
-## Install
-
-This bundle is itself a development checkout, so it follows its own rule: install it into a sandbox first, and install it into the profile you work in only when you have decided to — see the guard above.
-
-From this checkout, with Plugin Manager (preferred — it also handles bundle selection):
+## 结构
 
 ```
-plugin_manager  action: install_bundle  target: <path to this checkout>
+package.json          bundle 清单：exports、files、dsh.bundle.patch
+cordis.patch.yml      patch 层：Host 行 + 创造模式预设覆写
+index.js              Host 半边（今天不注册东西；将来放共享服务）
+tools/index.js        预设作用域半边：工具与安装守卫
+lib/bundle-check.js   结构检查器（隐私与安全两组也在里面）
+lib/generate.js       通用模板引擎（recipe → 文件 → 规则）
+lib/rules.js          声明式结构检查
+lib/scaffold.js       bundle 方案（derive 钩子 + 深度检查）
+lib/sandbox.js        沙盒引擎（工具与 CLI 共用）
+lib/ui.js             CDP 客户端与无头浏览器（工具与 CLI 共用）
+lib/checks.js         项目规则加载与执行
+lib/release.js        发版就绪检查、打包、演练
+templates/bundle/     bundle 方案：recipe.json + 每个变体一个模板
+skills/               挂进创造模式的 skill
+locale/{en,zh}.json   Plugin Manager 的标题 / 说明 / 详情路径
+docs/                 设计文档（哲学、方案、工具、检查、UI、发版）+ 详情页
+icon.svg              插件图标
+scripts/              CLI 与回归检查
 ```
 
-or from a shell in the profile:
+## 安装
+
+这个 bundle 本身就是一个开发中的检出，所以它遵守自己定的规则：先装进沙盒，等你决定了再装进你工作的 profile——见上面的守卫。
+
+从这个检出安装，用 Plugin Manager（推荐，它同时处理 bundle 选择）：
 
 ```
-dsh plugin --profile desktop add link:<this checkout>
+plugin_manager  action: install_bundle  target: <这个检出的路径>
 ```
 
-A local directory install links the checkout, so edits under `tools/` and `skills/` are picked up without reinstalling — but a changed module still needs a restart to load a fresh module generation, and a skill edit is picked up live by the skill provider.
+或者在 profile 的 shell 里：
 
-## Verify
+```
+dsh plugin --profile desktop add link:<这个检出>
+```
 
-1. `dsh --profile desktop --dump-config` shows the `creator-host` row and a `preset-cordis` whose plugin list ends with `creator-tools` and `creator-skills`.
-2. A **new** Creator-mode session lists the three added tools and both plugin-development skills.
-3. A new Standard-mode session lists none of them.
-4. The structural check run against this repository reports `ok: true`.
+本地目录安装是把检出链接进去，所以 `tools/` 和 `skills/` 下的改动不用重装就能生效——但改过的模块仍需重启才能加载新的模块代际，而 skill 的改动由 skill 提供者实时拾取。
 
-Existing sessions keep the composition they started with; presets are resolved when a session is created.
+## 验证
 
-## Development
+1. `dsh --profile desktop --dump-config` 里能看到 `creator-host` 行，以及一个插件列表以 `creator-tools`、`creator-skills` 结尾的 `preset-cordis`。
+2. **新开**一个创造模式会话，工具列表里有本包的工具，skill 列表里有 `dsh-plugin-new`、`dsh-plugin-sandbox`。
+3. 新开一个标准模式会话，一个都没有。
+4. 对本仓库跑结构检查，报告 `ok: true`。
 
-The package is plain ESM with **no dependencies and no build step**, on purpose: a preset row resolves its imports from the profile, so `@deepseek-ai/*` authoring helpers (`defineTool`, schemastery) are not importable from here. Tools are written as raw JSON Schema definitions instead.
+已有会话保留它创建时的组合；预设是在会话创建时解析的。
 
-Two checks need no Host:
+## 开发
+
+纯 ESM，**无依赖、无构建步骤**，这是刻意的：预设行从 profile 解析自己的 import，所以 `@deepseek-ai/*` 那套编写辅助（`defineTool`、schemastery）在这里 import 不到。工具因此写成裸 JSON Schema 定义。
+
+不需要宿主就能跑的检查：
 
 ```powershell
-node scripts/try-tool.mjs .        # mount all three tools + the guard on a stub context
-node scripts/try-sandbox.mjs       # the sandbox engine, with a fake dsh launcher
-node scripts/check-patch.mjs .     # parse cordis.patch.yml and diff it against the shipped preset
+node scripts/try-tool.mjs .        # 在桩上下文上挂载全部工具 + 守卫
+node scripts/try-sandbox.mjs       # 沙盒引擎，用假 dsh 启动器
+node scripts/check-patch.mjs .     # 解析 cordis.patch.yml 并与出厂预设比对
 ```
 
-`try-tool.mjs` is the regression test for the template: it fails when the generated bundle does not pass its own structural check, so a template edit that breaks the output is caught without installing anything. `try-sandbox.mjs` drives create / start / status / stop against a fake launcher — no profile is bootstrapped and no real port is taken — and covers the ownership marker, port uniqueness, workspace patching, and the credential record scan.
+`try-tool.mjs` 是模板的回归测试：生成的 bundle 通不过自己的结构检查它就失败，所以一次破坏产物的模板改动不用安装任何东西就能被抓到。`try-sandbox.mjs` 用假启动器驱动 create / start / status / stop——不引导任何 profile，也不占用真实端口——覆盖归属标记、端口唯一、工作区改写、凭据记录扫描。
 
-`check-patch.mjs` parses the patch with the same YAML library DSH uses and compares the Creator-mode override with `@deepseek-ai/dsh-web-app/presets/cordis.patch.yml`: dropped rows, changed row order, a changed plan-mode section, and unexpected additions all fail. Against the Desktop install that file lives inside `app.asar`, so run it with the DSH runtime instead of `node`:
+`check-patch.mjs` 用 DSH 同款 YAML 库解析 patch，并与 `@deepseek-ai/dsh-web-app/presets/cordis.patch.yml` 比对：漏行、行序变化、plan-mode 段落被改、意外新增，都会失败。在桌面版安装里那个文件位于 `app.asar` 内，所以要用 DSH 的运行时跑，而不是 `node`：
 
 ```powershell
 $env:ELECTRON_RUN_AS_NODE = "1"
 & $env:DSH_NODE_EXECUTABLE scripts\check-patch.mjs .
 ```
 
-Test a change in an isolated instance rather than in the desktop app; the `dsh-plugin-isolated-test` skill shipped with this bundle is the procedure, and the short version is:
+改动用隔离实例验证，别用桌面端；本包附带的 `dsh-plugin-isolated-test` skill 就是流程，简版是：
 
 ```powershell
-$env:DSH_HOME = "<this checkout>\tmp\iso-home"   # reuse this home; do not recreate it per run
+$env:DSH_HOME = "<这个检出>\tmp\iso-home"   # 复用这个 home；不要每次运行重建
 dsh --profile iso-creator --host 127.0.0.1 --port 3099 --no-open
 ```
 
-`tmp/` is git-ignored.
+`tmp/` 已被 git 忽略。
 
-## Roadmap
+## 路线图
 
-Ordered by the lifecycle gaps in [docs/PHILOSOPHY.md](docs/PHILOSOPHY.md) §1 — the three stages that are still half-built.
+按 [docs/PHILOSOPHY.md](docs/PHILOSOPHY.md) §1 的生命周期缺口排序。
 
 **规范化开发与检查**
 
-- Done: project-declared rules (`checks.json`) covering documentation links, locale parity, import boundaries, console hygiene, and contract drift — a generated contract is compared against its generator, and `--update` regenerates it. Generated bundles ship a starter `checks.json` that already passes on the project it comes with.
-- More `dsh_plugin_check` coverage: YAML syntax of the patch (needs a parser), preset declarations, skill frontmatter.
+- 已完成：项目声明式规则（`checks.json`）覆盖文档断链、多语言对齐、分层依赖方向、console 卫生、契约漂移——生成物与它的生成器比对，`--update` 重新生成。生成的插件包自带一份起手 `checks.json`，并且在它自己生成的包上就能通过。
+- 待补：结构检查再覆盖 patch 的 YAML 语法（需要解析器）、预设声明、skill frontmatter。
 
 **集成测试**
 
-- Done: CDP-driven screenshots, assertions, real clicks and typing against a sandbox page.
-- Next: slot registration and theme tokens through Inspect, so "the tab is there" is also checked on the Host side rather than only in the DOM.
+- 已完成：CDP 驱动的截图、断言、真实点击与输入，对着沙盒页面跑；创造模式确实多出工具与 skill 已在真实会话里确认。
+- 待补：通过 Inspect 断言 slot 注册与主题 token，让「那个 tab 在」在宿主侧也被检查，而不只在 DOM 里。
 
 **发版**
 
-- Done: readiness checks against the real packer surface and `engines.dsh`, plus a sandbox rehearsal that installs the tarball and reads the composed config back.
-- Next: emit `engines.dsh` from the template (the running version is known at generation time), so an incompatible install is refused by DSH before activation instead of after.
+- 已完成：按打包器真实包面与 `engines.dsh` 的就绪检查，加上装 tarball、读回组合配置的沙盒演练。
+- 待补：让模板直接产出 `engines.dsh`（生成时就知道运行版本），这样不兼容的安装在激活前就被 DSH 拒绝，而不是激活后。
 
 **基础设施**
 
-- `scripts/sync-preset.mjs`: regenerate the shipped `preset-cordis` block from the installed DSH, instead of re-copying it by hand.
-- Template variants: a client-half bundle (slot registration), and a preset-only bundle that carries its own preset declaration.
-- Optional `/new-plugin` slash command over the same engine, once the `/` menu is confirmed to render in the target host.
+- `scripts/sync-preset.mjs`：从已安装的 DSH 重新生成出厂 `preset-cordis` 段落，而不是手工再复制一遍。
+- 模板变体：带客户端半边的 bundle（slot 注册），以及自带预设声明的纯预设 bundle。
+- 可选的 `/new-plugin` 斜杠命令，复用同一个引擎——前提是确认 `/` 菜单在目标宿主里能渲染。
 
-## Attribution
+## 来源
 
-`skills/dsh-plugin-sandbox/` started as a copy of the user's local skill `~/.dsh/skills/dsh-plugin-isolated-test` and has since been renamed and restructured around the sandbox model (multiple sandboxes per project, reuse, and handing the model setup to the user). Its `references/` still predate that rename — where they say "隔离实例" or `iso-home`, read "sandbox". The copy at `~/.dsh/skills/` was left untouched.
+`skills/dsh-plugin-sandbox/` 起初是用户本地 skill `~/.dsh/skills/dsh-plugin-isolated-test` 的副本，后来按沙盒模型改名并重构（一个项目多个沙盒、复用、把模型配置交给用户）。它的 `references/` 仍早于那次改名——里面写「隔离实例」或 `iso-home` 的地方，读作「沙盒」。`~/.dsh/skills/` 下的原件没有动。
