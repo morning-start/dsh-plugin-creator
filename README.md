@@ -39,6 +39,8 @@ plugin_manager  action: install_bundle  target: <这个检出的路径>
 
 讲能力，不讲功能清单。哪个工具实现哪条能力、参数与边界，在 [docs/TOOLS.md](docs/TOOLS.md)。
 
+**把模糊需求变成一个插件形态** —— 「我想让团队协作好一点」这种话直接生成，产出的包一定返工。所以先构思：用 `scenario-driven-product-design`（宿主有的话）做场景分析，再按一张**形态判定表**落到 DSH 的扩展点上——工具、客户端半边、预设、预设级挂载、skill、还是配置——最后产出五行决策记录（目标用户、核心场景、边界、形态与理由、第一版做哪个）。这五行直接变成生成器的输入。清单在 `skills/dsh-plugin-new/references/conception.md`，不依赖外部技能也能走完。
+
 **起一个插件** —— 一次调用产出清单、bundle patch、入口模块、多语言字典、图标、README，按需带示例工具与 skill。确定性：同样输入永远同样产出。返回前先自检，所以结构报告和插件同一轮到齐。
 
 **知道它为什么装不上、显示不出来** —— 只读结构检查把问题一次报完，而不是遇到第一个就抛：清单字段、声明的 patch、locale 与图标导出、入口模块、详情文档、打包白名单。每项 pass / warn / fail。
@@ -244,7 +246,7 @@ dsh --profile iso-creator --host 127.0.0.1 --port 3099 --no-open
 | **规范化检查** | 项目声明式规则（断链、locale 对齐、分层方向、console 卫生、契约漂移）；生成的包自带起手 `checks.json` | patch 的 YAML 语法、预设声明、skill frontmatter |
 | **集成测试** | CDP 截图 / 断言 / 真实点击输入；创造模式多出工具与 skill 已在真实会话确认 | 通过 Inspect 断言 slot 注册与主题 token |
 | **发版** | 按真实包面与 `engines.dsh` 的就绪检查；装 tarball 读回组合的沙盒演练 | 模板直接产出 `engines.dsh`，让不兼容在激活前被拒 |
-| **构思** | — | 需求 → 插件形态的判定（要不要工具、要不要客户端一半、预设还是全局） |
+| **构思** | 场景分析流程（`scenario-driven-product-design` 优先，缺失时用自带清单）+ 形态判定表 + 五行决策记录 | 仍是对话流程，没有机械校验；形态选错，后面全在为错误的形状服务 |
 
 基础设施：
 
