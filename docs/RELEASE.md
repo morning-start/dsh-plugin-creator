@@ -93,7 +93,55 @@ dsh plugin --profile <profile> add <name>@<上一版版本>
 3. 面板或数据面至少一处**与磁盘对上**（数字、条数、名字），不是「看着有东西」；
 4. 版本号在 profile 里就是你发的那个版本。
 
-## 8. 这个能力不做什么
+## 8. 提交到插件市场
+
+市场（`awesome-dsh-plugin`）的投稿是**一个 YAML 文件**，不是改 README：`data/plugins/<owner>__<repo>.yml`。两个 README 由脚本从 `data/plugins/*.yml` 生成，手工编辑会撞别人的行。
+
+条目**由包生成，不手写**：
+
+```powershell
+node scripts/market-entry.mjs            # 打印条目
+node scripts/market-entry.mjs --check    # 按发布规则校验 + 问 gh 要仓库状态
+node scripts/market-entry.mjs --write data/plugins/<owner>__<repo>.yml
+```
+
+`url` 和 `name` 来自 `git remote`，所以不可能指向别的仓库；一句话描述来自项目根的 `market.json`（写清楚这一行是**声明**，会被维护者对着代码核对）。
+
+### 市场自动检查的（本地也检查）
+
+| 规则 | 判据 |
+|---|---|
+| 文件名 | 必须等于 `url` 推出的 slug：`owner__repo.yml`；monorepo 是 `owner__repo--packages-x.yml` |
+| `url` | `https://github.com/owner/repo`，monorepo 指到子目录 |
+| `category` | 必须是发布列表里的取值（`dev` / `tools` / `ui` / `workflow` …） |
+| `description.en` | 必填、单行、**以句号结尾** |
+| 含 `: ` 的描述 | **必须加引号**，否则 YAML 读成嵌套键——最常见的投稿失败原因 |
+| `icon` | 只收 GitHub 托管的位图（png/jpg/jpeg/webp），**矢量图会被拒** |
+| `tarball` | 必须是 GitHub Release 上的 `.tgz` |
+
+### 只能由 GitHub 回答的
+
+`--check` 会问 `gh`，把这两条单独报出来，而不是假装离线能验：
+
+- **仓库满 1 天**。刚建的仓库第一次提交必红，指南说这道闸会自动重跑，几小时后自己变绿——不用重开 PR，也不用推空提交。
+- **`dsh-plugin` topic**。没加就会被拒。
+
+### 五个坑（来自指南，逐条对应我们的做法）
+
+1. **`dsh.bundle` 是安装的前提**。只声明 `dsh.client` 的仓库装不上——我们的 `package.json` 里 `dsh.bundle.patch` 一直有，结构检查也会查。
+2. **`@deepseek-ai/*` 要写 `peerDependencies`，不是 `dependencies`**。而且范围必须带显式的预发布分支，否则 node-semver 会**静默排除**所有预发布构建：
+   ```jsonc
+   // ❌ 看着宽，实际匹配不到 0.1.0-rc.6
+   "peerDependencies": { "@deepseek-ai/dsh-tools": ">=0.0.1-rc.1 <0.2.0" }
+   // ✅ 在匹配的元组上带预发布标签
+   "peerDependencies": { "@deepseek-ai/dsh-tools": ">=0.0.1-rc.1 <0.1.0 || >=0.1.0-rc.1 <0.2.0-0" }
+   ```
+   本包**没有任何依赖**，所以不受影响；一旦要加，按上面写。
+3. **`tarball` 的 `latest/download/` 只解析 tag，文件名照字面取**。资产名里带版本号，链接在你下一次发版时 404，而且没人会察觉。要么资产名不带版本，要么钉住 tag。
+4. **npm 包名是新的时，`npm publish` 返回那一刻还不一定装得上**：有时只留一个 `0.0.0-stage` 占位，有时 tarball 几分钟内 404。判断标准看 registry：`dist-tags.latest` 等于你的版本**且** `dist.tarball` 能下载。国内镜像可能更久，`dsh plugin --profile <p> add <name>` 真装一遍再算数。
+5. **描述必须属实**。写着「46 个工具、六大领域」就该真有；提了某个命令或 API，它就该存在。夸大是本来不错的插件被打回的主要原因。
+
+## 9. 这个能力不做什么
 
 - **不发布**：不跑 `npm publish`，不改 registry 配置，不碰账号；
 - **不验权限**：`publishConfig.access`、npm 登录态由 npm 自己报错；

@@ -45,7 +45,9 @@ plugin_manager  action: install_bundle  target: <这个检出的路径>
 
 **从模板生成任何结构化内容** —— 插件脚手架只是通用能力的一个实例：**方案**是数据（变量、文件映射、条件、规则）加模板，所以新方案是一个目录，不是新生成器。见 [docs/SCHEMES.md](docs/SCHEMES.md)。
 
-**发一个你已经装过一次的版** —— 就绪检查去问打包器**真实**会装进 tarball 的东西（不是 `files` 声称的），并拿 `engines.dsh` 和运行中的 DSH 比对，版本不匹配在安装前就被发现。演练随后打包、装进沙盒、把组合配置读回来，顺手给回滚命令。**发布仍是人的决定**：工具只报「能不能发、该跑什么」。见 [docs/RELEASE.md](docs/RELEASE.md)。
+**发一个你已经装过一次的版** —— 就绪检查去问打包器**真实**会装进 tarball 的东西（不是 `files` 声称的），并拿 `engines.dsh` 和运行中的 DSH 比对，版本不匹配在安装前就被发现。演练随后打包、装进沙盒、把组合配置读回来，顺手给回滚命令。**发布仍是人的决定**：工具只报「能不能发、该跑什么」。
+
+**把条目提交到插件市场** —— 市场要的是一个 YAML 文件，条目由包生成而不是手写：`url` 和 `name` 来自 `git remote`（所以不可能指向别的仓库），那一行来自 `market.json`（因为它是会被维护者对着代码核对的**声明**，不能自动截断）。发布规则先在本地跑一遍——文件名 slug、分类取值、单行以句号结尾、`: ` 要加引号、图标必须位图、tarball 的 `latest/download/` 会烂——再由 `gh` 补上只有 GitHub 能回答的两条（仓库满 1 天、`dsh-plugin` topic）。见 [docs/RELEASE.md](docs/RELEASE.md)。
 
 **判断放在该放的地方** —— 两个 skill 承载工具不该编码的东西：生成前该问什么，以及怎么测一个插件而不产出假证据。
 
@@ -175,9 +177,11 @@ lib/sandbox.js        沙盒引擎（工具与 CLI 共用）
 lib/ui.js             CDP 客户端与无头浏览器（工具与 CLI 共用）
 lib/checks.js         项目规则加载与执行
 lib/release.js        发版就绪检查、打包、演练
+lib/market.js         插件市场条目：生成、校验、仓库状态
 templates/bundle/     bundle 方案：recipe.json + 每个变体一个模板
 skills/               挂进创造模式的 skill
 locale/{en,zh}.json   Plugin Manager 的标题 / 说明 / 详情路径
+market.json           插件市场那一行（声明，不是自动截断）
 docs/                 设计文档 + 详情页
 icon.svg              插件图标
 scripts/              CLI 与回归检查
