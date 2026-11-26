@@ -62,7 +62,7 @@ jobs:
       - name: Suites (when the toolkit is present)
         if: hashFiles('scripts/release.mjs') != ''
         run: |
-          for suite in try-tool try-sandbox try-checks try-audit try-generate try-release try-market; do
+          for suite in try-tool try-sandbox try-checks try-audit try-generate try-release try-market try-adopt; do
             [ -f "scripts/$suite.mjs" ] && node "scripts/$suite.mjs"
           done
           [ -f scripts/check-project.mjs ] && node scripts/check-project.mjs .

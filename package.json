@@ -35,7 +35,9 @@
     "check:market": "node scripts/try-market.mjs",
     "market": "node scripts/market-entry.mjs",
     "contract": "node scripts/gen-tools-contract.mjs --write",
-    "check:tool": "node scripts/try-tool.mjs ."
+    "check:tool": "node scripts/try-tool.mjs .",
+    "check:adopt": "node scripts/try-adopt.mjs",
+    "adopt": "node scripts/adopt.mjs"
   },
   "files": [
     "index.js",

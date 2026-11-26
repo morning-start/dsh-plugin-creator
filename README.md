@@ -27,6 +27,8 @@ plugin_manager  action: install_bundle  target: <这个检出的路径>
 
 **把模糊需求变成一个插件形态** —— 「我想让团队协作好一点」这种话直接生成，产出的包一定返工。所以先构思：**角色与入口**（操作者、执行者、被影响者分开写）→ **现有能力五态**（通 / 半 / 假 / 断 / 无，十有八九需求的一半 DSH 已经有了）→ **场景枚举**（八组基线，5–8 条）→ **边界八问**（空重并权断慢大旧）→ **形态判定**（工具 / 客户端半边 / 预设 / 预设级挂载 / skill / 配置）→ **排序**（新插件按频次，修既有按伤害）。产出七行决策记录，直接变成生成器的输入。方法内化自场景驱动的产品设计，不依赖外部技能存在。见 [references/conception.md](skills/dsh-plugin-new/references/conception.md)。
 
+**把已有插件补成标准项目** —— 生成器管从零开始，这个管另一半：已经写好的插件缺 `checks.json`、缺 CI、缺 `repository` 字段。它先审计，把发现分成**能机械补的**（从 git remote 推字段、复制那份通用 workflow、补 `.gitignore`）、**要人拍的**（工具挂哪个预设）、**只能报告的**（patch 随 DSH 升级漂移）。只写第一类，且文件存在就跳过、工作区脏就拒绝、跑第二遍零动作。起手 `checks.json` 里只放**这个项目当前已经通过的规则**——规范化不能顺手把项目变红。见 [docs/ADOPT.md](docs/ADOPT.md)。
+
 **起一个插件** —— 一次调用产出清单、bundle patch、入口模块、多语言字典、图标、README，按需带示例工具与 skill。确定性：同样输入永远同样产出。返回前先自检，所以结构报告和插件同一轮到齐。
 
 **知道它为什么装不上、显示不出来** —— 只读结构检查把问题一次报完，而不是遇到第一个就抛：清单字段、声明的 patch、locale 与图标导出、入口模块、详情文档、打包白名单。每项 pass / warn / fail。
@@ -178,6 +180,7 @@ lib/ui.js             CDP 客户端与无头浏览器（工具与 CLI 共用）
 lib/checks.js         项目规则加载与执行
 lib/release.js        发版就绪检查、打包、发布、演练
 lib/ship.js           ship：一条命令跑完整个发布顺序
+lib/adopt.js          规范化已有插件：审计、计划、只补标准件
 lib/market.js         插件市场条目：生成、校验、仓库状态
 templates/bundle/     bundle 方案：recipe.json + 每个变体一个模板
 skills/               挂进创造模式的 skill
@@ -185,7 +188,7 @@ locale/{en,zh}.json   Plugin Manager 的标题 / 说明 / 详情路径
 market.json           插件市场那一行（声明，不是自动截断）
 docs/                 设计文档 + 详情页
 icon.svg              插件图标
-scripts/              CLI 与回归检查
+scripts/              CLI 与回归检查（adopt.mjs 规范化已有项目）
 .github/workflows/    tag 触发的发版工作流（生成的插件包也带一份）
 ```
 
