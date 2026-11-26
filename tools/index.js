@@ -118,6 +118,10 @@ function isLocalTarget(target) {
   const value = target.trim()
   if (value.length === 0) return false
   if (/^(link|file):/i.test(value)) return true
+  // Recognise the shapes on any platform, not just the one we run on: a guard
+  // that only understands the local path syntax is fooled by a path copied from
+  // another machine, and CI (Linux) exercises the Windows shape.
+  if (/^(?:[A-Za-z]:[\\/]|\\\\|\/)/.test(value)) return true
   if (isAbsolute(value)) return true
   return /^\.{1,2}[\\/]/.test(value)
 }

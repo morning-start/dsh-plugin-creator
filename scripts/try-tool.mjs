@@ -117,7 +117,9 @@ writeFileSync(join(repo, 'tmp', 'guard-sandbox', 'sandbox.json'), JSON.stringify
 
 const cases = [
   ['plugin_manager install_bundle link:', { name: 'plugin_manager', arguments: { action: 'install_bundle', target: 'link:E:/Workplace/x' } }, 'deny'],
-  ['plugin_manager install_bundle absolute path', { name: 'plugin_manager', arguments: { action: 'install_bundle', target: 'E:/Workplace/x' } }, 'deny'],
+  ['plugin_manager install_bundle windows absolute path', { name: 'plugin_manager', arguments: { action: 'install_bundle', target: 'E:/Workplace/x' } }, 'deny'],
+  ['plugin_manager install_bundle posix absolute path', { name: 'plugin_manager', arguments: { action: 'install_bundle', target: '/opt/plugins/x' } }, 'deny'],
+  ['plugin_manager install_bundle unc path', { name: 'plugin_manager', arguments: { action: 'install_bundle', target: '\\\\server\\share\\x' } }, 'deny'],
   ['plugin_manager install_bundle relative path', { name: 'plugin_manager', arguments: { action: 'install_bundle', target: './x' } }, 'deny'],
   ['plugin_manager install_bundle registry spec', { name: 'plugin_manager', arguments: { action: 'install_bundle', target: 'dshmarket@1.84.1' } }, 'allow'],
   ['plugin_manager set_bundle', { name: 'plugin_manager', arguments: { action: 'set_bundle', target: 'link:E:/x' } }, 'allow'],
