@@ -218,8 +218,7 @@ Ordered by the lifecycle gaps in [docs/PHILOSOPHY.md](docs/PHILOSOPHY.md) §1 �
 
 **规范化开发与检查**
 
-- Done: project-declared rules (`checks.json`) covering documentation links, locale parity, import boundaries, console hygiene, and contract drift — a generated contract is compared against its generator, and `--update` regenerates it.
-- Next: ship a starter `checks.json` inside the generated bundle, so a new project starts with the rules it should not have to rediscover.
+- Done: project-declared rules (`checks.json`) covering documentation links, locale parity, import boundaries, console hygiene, and contract drift — a generated contract is compared against its generator, and `--update` regenerates it. Generated bundles ship a starter `checks.json` that already passes on the project it comes with.
 - More `dsh_plugin_check` coverage: YAML syntax of the patch (needs a parser), preset declarations, skill frontmatter.
 
 **集成测试**

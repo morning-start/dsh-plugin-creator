@@ -71,6 +71,10 @@
       "transform": "trim"
     },
     {
+      "name": "hasZh",
+      "derive": "hasZh"
+    },
+    {
       "name": "summary",
       "derive": "summary"
     },
@@ -152,6 +156,18 @@
       "from": "gitattributes.txt",
       "to": ".gitattributes",
       "package": false
+    },
+    {
+      "from": "checks.json.tpl",
+      "to": "checks.json",
+      "when": "!hasZh",
+      "package": false
+    },
+    {
+      "from": "checks.json.zh.tpl",
+      "to": "checks.json",
+      "when": "hasZh",
+      "package": false
     }
   ],
   "rules": [
@@ -163,6 +179,12 @@
       "id": "recipe:files-listed",
       "type": "files-listed",
       "manifest": "package.json"
+    },
+    {
+      "id": "recipe:checks",
+      "type": "json-field",
+      "path": "checks.json",
+      "field": "rules"
     },
     {
       "id": "recipe:manifest",

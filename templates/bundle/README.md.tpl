@@ -8,6 +8,18 @@ Generated from the `dsh-plugin-powerful` bundle template.
 
 {{summary}}
 
+## Checks
+
+`checks.json` ships with this project so the rules it should not have to rediscover are already declared: relative documentation links resolve, the locale files carry the same keys, the entry and patch exist, and every file in the tree is inside `package.json` `files`.
+
+Run them with the `dsh_project_check` tool from `dsh-plugin-powerful`, or with its `scripts/check-project.mjs`:
+
+```
+node <dsh-plugin-powerful>/scripts/check-project.mjs .
+```
+
+Add your own rules as the project grows — architecture boundaries are the usual next one; the rule reference is `dsh-plugin-powerful`'s `docs/CHECKS.md`.
+
 ## Install
 
 **This bundle is under development, so it goes into a sandbox first.** Installing a

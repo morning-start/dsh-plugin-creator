@@ -13,6 +13,7 @@ import { fileURLToPath } from 'node:url'
 import { generate, loadRecipe, render, test } from '../lib/generate.js'
 import { covers, runRules, walk } from '../lib/rules.js'
 import { scaffold } from '../lib/scaffold.js'
+import { runProjectChecks } from '../lib/checks.js'
 
 const repo = fileURLToPath(new URL('..', import.meta.url))
 const work = join(repo, 'tmp', 'test-generate')
@@ -154,8 +155,8 @@ try {
 
   console.log('\nthe bundle scheme')
   for (const [label, values, expected] of [
-    ['tool only', { packageName: 'dsh-plugin-a', title: 'A', description: 'A test plugin for the engine.' }, ['index.js', 'tools/example.js', 'cordis.patch.yml', 'locale/en.json', 'package.json', 'README.md', 'icon.svg', '.gitignore', '.gitattributes']],
-    ['no tool, with skill', { packageName: '@scope/b', title: 'B', description: 'Another test plugin here.', withTool: false, withSkill: true, titleZh: '乙' }, ['index.js', 'skills/b/SKILL.md', 'cordis.patch.yml', 'locale/en.json', 'locale/zh.json', 'package.json']],
+    ['tool only', { packageName: 'dsh-plugin-a', title: 'A', description: 'A test plugin for the engine.' }, ['index.js', 'tools/example.js', 'cordis.patch.yml', 'locale/en.json', 'package.json', 'README.md', 'icon.svg', '.gitignore', '.gitattributes', 'checks.json']],
+    ['no tool, with skill', { packageName: '@scope/b', title: 'B', description: 'Another test plugin here.', withTool: false, withSkill: true, titleZh: '乙' }, ['index.js', 'skills/b/SKILL.md', 'cordis.patch.yml', 'locale/en.json', 'locale/zh.json', 'package.json', 'checks.json']],
   ]) {
     const dest = join(work, label.replace(/[^a-z]+/g, '-'))
     const result = await scaffold({ ...values, dest })
@@ -165,6 +166,11 @@ try {
     check(`${label}: skill frontmatter matches`, values.withSkill === true
       ? readFileSync(join(dest, 'skills', values.packageName.split('/').pop(), 'SKILL.md'), 'utf8').includes(`name: ${values.packageName.split('/').pop()}`)
       : true)
+    // The starter checks file must actually pass on the project it ships with.
+    const starter = await runProjectChecks(dest)
+    check(`${label}: the starter checks pass`, starter.ok === true, JSON.stringify(starter.checks.filter(item => item.status !== 'pass')))
+    check(`${label}: the zh variant declares locale parity`,
+      values.titleZh === undefined ? starter.ran === 4 : starter.ran === 5, `${starter.ran} rules ran`)
   }
 
   const walked = await walk(join(work, 'out'))

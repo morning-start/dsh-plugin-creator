@@ -123,6 +123,24 @@ markdown 里的**相对链接**必须解析得到。跳过 `http(s)://`、`mailt
 
 本仓库也用自己的规则检查自己的工具面：`scripts/gen-tools-contract.mjs` 把六个工具的名字、说明、参数 schema、输出 schema 生成为 `docs/contracts/tools.json`，`checks.json` 里的 `contract:tools` 守着它。
 
+## 生成的插件包自带起手 checks.json
+
+`dsh_plugin_new` 生成的包里直接带一份 `checks.json`，新项目不用重新发现这些规则：
+
+| 规则 | 默认开 |
+|---|---|
+| `docs:links` | ✅ |
+| `locale:parity` | 只在生成时给了中文（有 `locale/zh.json`）才加 |
+| `bundle:entry` / `bundle:patch` | ✅ |
+| `bundle:files-listed` | ✅（`exclude` 里显式列出 `.gitignore`、`.gitattributes`、`checks.json` 这些本地文件） |
+
+两条设计取舍：
+
+- **不预置 `import-boundary`**：新项目通常还没有分层，写了也是空转；等真有 `src/` 再加；
+- **`files-listed` 的 exclude 写进文件本身**，而不是靠生成器注入——单独跑 `check-project` 时没有生成器的上下文，规则必须自洽。
+
+方案里对应 `templates/bundle/checks.json.tpl` 与 `checks.json.zh.tpl` 两个变体（`when: hasZh` 二选一），并有一条 `recipe:checks` 规则验证生成出来的 `checks.json` 自身有 `rules`。
+
 ## 本仓库自己的 checks.json
 
 这个仓库也用自己的规则检查自己（dogfood）：
