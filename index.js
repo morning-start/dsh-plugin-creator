@@ -11,7 +11,7 @@
  * be registered inside `ctx.effect(...)` so unloading the bundle removes it.
  */
 
-export const name = 'powerful'
+export const name = 'creator'
 
 /** @param {import('@deepseek-ai/cordis').Context} ctx */
 export function apply(ctx) {

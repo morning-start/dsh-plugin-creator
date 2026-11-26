@@ -27,7 +27,7 @@ const inserted = ours.find((row) => row.insert)?.insert ?? []
 const problems = []
 if (shippedRow === undefined) problems.push('shipped patch has no preset-cordis row')
 if (oursRow === undefined) problems.push('our patch has no preset-cordis override')
-if (!inserted.some((row) => row.id === 'powerful-host')) problems.push('no powerful-host insert row')
+if (!inserted.some((row) => row.id === 'creator-host')) problems.push('no creator-host insert row')
 
 if (shippedRow && oursRow) {
   if (oursRow.config.id !== shippedRow.config.id) problems.push('preset id differs')
@@ -37,7 +37,7 @@ if (shippedRow && oursRow) {
   const added = ourIds.filter((id) => !shippedIds.includes(id))
   const lost = shippedIds.filter((id) => !ourIds.includes(id))
   if (lost.length > 0) problems.push(`dropped shipped rows: ${lost.join(', ')}`)
-  if (added.join(',') !== 'powerful-tools,powerful-skills') {
+  if (added.join(',') !== 'creator-tools,creator-skills') {
     problems.push(`unexpected added rows: ${added.join(', ') || '(none)'}`)
   }
   // Order of the shipped rows must be preserved.

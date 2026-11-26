@@ -1,7 +1,7 @@
 {
   "meta": {
     "title": "插件开发增强",
-    "description": "只在创造模式中增加插件开发相关的帮助：dsh_plugin_new 按标准模板一键生成一个完整插件包；dsh_plugin_check 检查一个插件包为什么装不上或显示不出来（清单字段、bundle patch、locale、图标、入口模块、详情文档、打包白名单）；dsh_sandbox 管理项目自己的测试沙盒（建、起、探活、停），保证开发中的插件不会装进当前环境；以及两个 Skill：dsh-plugin-new 负责生成前的问询，dsh-plugin-sandbox 负责插件沙盒测试（一个项目可以有多个沙盒，每个沙盒有独立 DSH_HOME、profile、端口、工作区副本，且长期复用；需要模型时把打开沙盒的命令交给用户，由他自己加一次模型）。其他预设不受影响。卸载本插件后，工具与 Skill 一并移除，创造模式回落到出厂预设。生成的插件包不覆写任何预设，装上也不会改变已有预设。检查工具只读，需要传入插件包的绝对路径；它不按 YAML 解析 patch 文件，因此查不出 YAML 语法错误。",
+    "description": "只在创造模式中增加一套插件开发工具：dsh_plugin_new 按标准模板一键生成完整插件包；dsh_plugin_check 检查一个插件包为什么装不上、显示不出来或不宜发布（清单字段、bundle patch、locale、图标、入口、详情文档、打包白名单，以及作者隐私与安全风险）；dsh_project_check 跑项目在 checks.json 里声明的规则（文档链接、多语言对齐、分层依赖方向、契约漂移）；dsh_sandbox 管理项目自己的隔离测试实例，保证开发中的插件不会装进你正在用的环境；dsh_plugin_ui 用无头浏览器给沙盒页面截图并断言；dsh_plugin_release 做发版就绪检查、打包、以及在沙盒里演练安装，但不发布。两个 Skill 负责判断：dsh-plugin-new 负责生成前的问询，dsh-plugin-sandbox 负责在 dsh web 沙盒里测插件（一个项目可以有多个沙盒，每个有独立 DSH_HOME、profile、端口和工作区副本，长期复用；需要模型时把打开沙盒的命令交给用户，由他自己加一次模型）。其他预设不受影响。卸载本插件后，工具与 Skill 一并移除，创造模式回落到出厂预设。生成的插件包不覆写任何预设，装上也不会改变已有预设。检查工具只读；它不按 YAML 解析 patch 文件，因此查不出 YAML 语法错误；安全检查只报告插件能做什么，不能证明它一定无害。",
     "detail": "docs/DETAIL.zh.md"
   }
 }

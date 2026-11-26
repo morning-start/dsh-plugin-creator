@@ -23,7 +23,7 @@ import { inspectRelease, packRelease, rehearseRelease } from '../lib/release.js'
 import { openPage, runAssertions, stopChrome } from '../lib/ui.js'
 import { RULE_TYPES, runProjectChecks } from '../lib/checks.js'
 
-export const name = 'powerful-tools'
+export const name = 'creator-tools'
 export const inject = ['tools']
 
 /**

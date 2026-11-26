@@ -43,7 +43,7 @@
 | 网络 | `tool-web` | 查资料用现成的 |
 | DSH 自身 | `tool-cordis`（Inspect） `tool-plugin-manager` `tool-plugin-market` | **装/卸/启用是 `plugin_manager` 的事**；运行时真相从 Inspect 来，不从源码猜 |
 | 技能 | `skill-filesystem` `tool-skill` | 判断类知识写成技能，不写进工具描述 |
-| 本包 | `powerful-tools` `powerful-skills` | 只放前九组没有的东西 |
+| 本包 | `creator-tools` `creator-skills` | 只放前九组没有的东西 |
 
 由此得到四条硬约束：
 

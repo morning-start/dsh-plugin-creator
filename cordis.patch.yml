@@ -21,7 +21,7 @@
 # shipped rows that the new version added.
 
 - insert:
-    - id: powerful-host
+    - id: creator-host
       name: 'dsh-plugin-creator'
 
 # --- shipped preset-cordis (verbatim, re-indented) ---
@@ -166,16 +166,16 @@
       # --- dsh-plugin-creator additions (Creator mode only) ---
 
       # Tools: `./tools` registers dsh_plugin_check on this preset's context.
-      - id: powerful-tools
+      - id: creator-tools
         name: 'dsh-plugin-creator/tools'
 
       # Skills: a second filesystem provider, isolated to this package's own
       # `skills/` directory. `includeDefaultRoots: false` keeps it from
       # re-scanning the project and user roots that the shipped provider owns.
-      - id: powerful-skills
+      - id: creator-skills
         name: '@deepseek-ai/dsh-skill-filesystem'
         config:
-          providerName: powerful
+          providerName: creator
           includeDefaultRoots: false
           customSkillDirs:
             - !!js process.getBuiltinModule('node:path').join(process.getBuiltinModule('node:path').dirname(process.getBuiltinModule('node:module').createRequire(baseUrl).resolve('dsh-plugin-creator/package.json')), 'skills')

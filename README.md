@@ -122,10 +122,10 @@ Limits, stated plainly: it does not cover a human typing `dsh plugin add` in the
 
 The bundle patch (`cordis.patch.yml`) overrides the shipped `preset-cordis` row and appends two rows to its plugin list:
 
-- `powerful-tools` → `dsh-plugin-creator/tools`, which registers `dsh_plugin_check` on the preset's context;
-- `powerful-skills` → a second `@deepseek-ai/dsh-skill-filesystem` provider with `includeDefaultRoots: false` and `customSkillDirs` pointing at this package's `skills/` directory.
+- `creator-tools` → `dsh-plugin-creator/tools`, which registers `dsh_plugin_check` on the preset's context;
+- `creator-skills` → a second `@deepseek-ai/dsh-skill-filesystem` provider with `includeDefaultRoots: false` and `customSkillDirs` pointing at this package's `skills/` directory.
 
-The patch also inserts one Host row, `powerful-host`, which registers nothing today and exists so the bundle has a stable identity row in Plugin Manager.
+The patch also inserts one Host row, `creator-host`, which registers nothing today and exists so the bundle has a stable identity row in Plugin Manager.
 
 Uninstalling removes the whole patch layer, so `preset-cordis` falls back to the declaration shipped in `@deepseek-ai/dsh-web-app` and the tools and skills disappear with it. No other preset is patched or restated.
 
@@ -177,7 +177,7 @@ A local directory install links the checkout, so edits under `tools/` and `skill
 
 ## Verify
 
-1. `dsh --profile desktop --dump-config` shows the `powerful-host` row and a `preset-cordis` whose plugin list ends with `powerful-tools` and `powerful-skills`.
+1. `dsh --profile desktop --dump-config` shows the `creator-host` row and a `preset-cordis` whose plugin list ends with `creator-tools` and `creator-skills`.
 2. A **new** Creator-mode session lists the three added tools and both plugin-development skills.
 3. A new Standard-mode session lists none of them.
 4. The structural check run against this repository reports `ok: true`.
@@ -209,7 +209,7 @@ Test a change in an isolated instance rather than in the desktop app; the `dsh-p
 
 ```powershell
 $env:DSH_HOME = "<this checkout>\tmp\iso-home"   # reuse this home; do not recreate it per run
-dsh --profile iso-powerful --host 127.0.0.1 --port 3099 --no-open
+dsh --profile iso-creator --host 127.0.0.1 --port 3099 --no-open
 ```
 
 `tmp/` is git-ignored.
