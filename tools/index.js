@@ -13,16 +13,13 @@
  * - keep each tool read-only unless the tool description says otherwise.
  */
 
-import { readFile, readdir, stat } from 'node:fs/promises'
-import { dirname, extname, join, relative, resolve, isAbsolute } from 'node:path'
+import { readFile } from 'node:fs/promises'
+import { resolve } from 'node:path'
+import { inspectBundle } from '../lib/bundle-check.js'
+import { scaffold } from '../lib/scaffold.js'
 
 export const name = 'powerful-tools'
 export const inject = ['tools']
-
-/** Plugin Manager's per-image icon limit. */
-const MAX_ICON_BYTES = 256 * 1024
-const ICON_EXTENSIONS = new Set(['.svg', '.png', '.jpg', '.jpeg', '.webp'])
-const STATUS = ['pass', 'warn', 'fail']
 
 /**
  * Register every Creator-mode tool this bundle adds.
@@ -30,6 +27,21 @@ const STATUS = ['pass', 'warn', 'fail']
  */
 export function apply(ctx) {
   ctx.effect(() => ctx.tools.register(pluginCheck), 'dsh-plugin-powerful/dsh_plugin_check')
+  ctx.effect(() => ctx.tools.register(pluginNew(() => sessionDirectory(ctx))), 'dsh-plugin-powerful/dsh_plugin_new')
+}
+
+/** The session's working directory, when the deployment provides the service. */
+function sessionDirectory(ctx) {
+  return (exec) => {
+    const service = ctx.get('workingDirectory')
+    const session = exec?.agent?.session
+    if (service === undefined || session === undefined) return undefined
+    try {
+      return service.get(session)
+    } catch {
+      return undefined
+    }
+  }
 }
 
 /**
@@ -73,7 +85,7 @@ const pluginCheck = {
             type: 'object',
             properties: {
               id: { type: 'string' },
-              status: { type: 'string', enum: STATUS },
+              status: { type: 'string', enum: ['pass', 'warn', 'fail'] },
               message: { type: 'string' },
             },
             required: ['id', 'status', 'message'],
@@ -82,310 +94,146 @@ const pluginCheck = {
       },
       required: ['ok', 'target', 'summary', 'checks'],
     },
-    render: (_args, value) => [{ type: 'text', text: renderSummary(value) }],
+    render: (_args, value) => [{ type: 'text', text: renderCheck(value) }],
   },
   async execute(args) {
-    const root = resolve(String(args.path))
-    const report = await inspectBundle(root)
-    return report
+    return await inspectBundle(String(args.path))
   },
 }
 
 /**
- * Run every check against one bundle directory.
- * @param {string} root - resolved package directory.
+ * Create a new bundle from the standard template.
+ *
+ * The work is `lib/scaffold.js`, shared with `scripts/new-bundle.mjs`, so a
+ * bundle generated from the CLI and one generated here are byte-identical.
  */
-async function inspectBundle(root) {
-  /** @type {{id: string, status: string, message: string}[]} */
-  const checks = []
-  const add = (id, status, message) => { checks.push({ id, status, message }) }
+function pluginNew(defaultDirectory) {
+  return {
+    name: 'dsh_plugin_new',
+    description:
+      'Create a new DSH plugin bundle from the standard template: package manifest, bundle patch, entry module, locale dictionaries, icon, README, and optionally an example tool and a skill. Deterministic — the same arguments always produce the same files. It runs dsh_plugin_check on the result and returns that report, so fix every reported failure before installing.',
+    parameters: {
+      type: 'object',
+      properties: {
+        packageName: {
+          type: 'string',
+          description: 'Lowercase npm package name, such as "dsh-plugin-my-thing" or "@scope/my-thing". The preset row id is derived from it when rowId is omitted.',
+        },
+        title: {
+          type: 'string',
+          description: 'The name users see in Plugin Manager. Short, sentence case.',
+        },
+        description: {
+          type: 'string',
+          description: "What the plugin does and how to trigger it, in the user's language. Plugin Manager shows it verbatim.",
+        },
+        dest: {
+          type: 'string',
+          description: 'Directory to create. Defaults to a new folder named after the package inside the session working directory. Refuses a non-empty directory unless force is true.',
+        },
+        titleZh: { type: 'string', description: 'Chinese title, when the user works in Chinese. Adds locale/zh.json.' },
+        descriptionZh: { type: 'string', description: 'Chinese description. Adds locale/zh.json.' },
+        rowId: { type: 'string', description: 'Loader row id, lowercase letters, digits, and hyphens. Defaults to the package name without the "dsh-plugin-" prefix and any scope.' },
+        toolName: { type: 'string', description: 'Name of the example tool, lowercase with underscores. Defaults to rowId with hyphens turned into underscores.' },
+        skillName: { type: 'string', description: 'Skill directory name, when withSkill is true. Defaults to rowId.' },
+        version: { type: 'string', description: 'Package version. Defaults to 0.1.0.' },
+        withTool: { type: 'boolean', description: 'Include and register an example tool (default true). Set false for a plugin that only wires services or a skill.' },
+        withSkill: { type: 'boolean', description: 'Include a SKILL.md and a skill-provider row (default false). The skill is then listed in every preset, not only Creator mode.' },
+        force: { type: 'boolean', description: 'Write into a directory that already has files, overwriting only the files this template generates.' },
+        configPath: {
+          type: 'string',
+          description: 'Read any of the fields above from a JSON file instead of the arguments; arguments that are also given win. Use it when a plan already exists on disk.',
+        },
+      },
+      required: ['packageName', 'title', 'description'],
+    },
+    output: {
+      schema: {
+        type: 'object',
+        properties: {
+          dest: { type: 'string' },
+          files: { type: 'array', items: { type: 'string' } },
+          warnings: { type: 'array', items: { type: 'string' } },
+          checks: {
+            type: 'object',
+            properties: {
+              ok: { type: 'boolean' },
+              pass: { type: 'integer' },
+              warn: { type: 'integer' },
+              fail: { type: 'integer' },
+              findings: { type: 'array', items: { type: 'string' } },
+            },
+            required: ['ok', 'pass', 'warn', 'fail', 'findings'],
+          },
+        },
+        required: ['dest', 'files', 'warnings', 'checks'],
+      },
+      render: (_args, value) => [{ type: 'text', text: renderNew(value) }],
+    },
+    async execute(args, exec) {
+      const fromFile = args.configPath === undefined
+        ? {}
+        : JSON.parse(await readFile(resolve(String(args.configPath)), 'utf8'))
+      const merged = { ...fromFile, ...definedOnly(args) }
+      delete merged.configPath
 
-  let info
-  try {
-    info = await stat(root)
-  } catch {
-    add('directory', 'fail', `no such directory: ${root}`)
-    return finish(root, checks)
-  }
-  if (!info.isDirectory()) {
-    add('directory', 'fail', `not a directory: ${root}`)
-    return finish(root, checks)
-  }
+      if (merged.dest === undefined) {
+        const base = defaultDirectory(exec)
+        if (base === undefined) {
+          throw new Error('dest is required: this deployment exposes no working directory for the session')
+        }
+        merged.dest = resolve(base, folderName(String(merged.packageName)))
+      }
 
-  let manifest
-  try {
-    manifest = JSON.parse(await readFile(join(root, 'package.json'), 'utf8'))
-    add('manifest', 'pass', 'package.json is valid JSON')
-  } catch (error) {
-    add('manifest', 'fail', `package.json unreadable or invalid: ${message(error)}`)
-    return finish(root, checks)
-  }
-
-  checkIdentity(manifest, add)
-  checkEntry(manifest, root, add)
-  const patchPath = await checkPatch(manifest, root, add)
-  checkLocaleExports(manifest, add)
-  const locale = await checkLocaleFiles(root, add)
-  await checkIcon(manifest, root, add)
-  await checkDetail(locale, root, add)
-  checkFilesWhitelist(manifest, add)
-  if (patchPath !== undefined) await checkPatchBody(patchPath, root, add)
-
-  return finish(root, checks)
-}
-
-function finish(target, checks) {
-  const count = (status) => checks.filter(check => check.status === status).length
-  const summary = { pass: count('pass'), warn: count('warn'), fail: count('fail') }
-  return { ok: summary.fail === 0, target, summary, checks }
-}
-
-function checkIdentity(manifest, add) {
-  if (typeof manifest.name === 'string' && manifest.name.length > 0) {
-    add('name', 'pass', `name: ${manifest.name}`)
-  } else {
-    add('name', 'fail', 'package.json declares no name')
-  }
-  if (typeof manifest.version === 'string' && manifest.version.length > 0) {
-    add('version', 'pass', `version: ${manifest.version}`)
-  } else {
-    add('version', 'fail', 'package.json declares no version; Plugin Manager cannot update or compare it')
-  }
-}
-
-function checkEntry(manifest, root, add) {
-  const entry = resolveExport(manifest.exports?.['.'] ?? manifest.main)
-  if (entry === undefined) {
-    add('entry', 'fail', 'package.json exports no entry module ("." export or main)')
-    return
-  }
-  const path = resolve(root, entry)
-  if (!inside(root, path)) {
-    add('entry', 'fail', `entry module escapes the package: ${entry}`)
-    return
-  }
-  add('entry', 'pass', `entry module: ${entry}`)
-}
-
-async function checkPatch(manifest, root, add) {
-  const declared = manifest.dsh?.bundle?.patch
-  if (typeof declared !== 'string' || declared.length === 0) {
-    add('patch-declared', 'fail', 'package.json declares no dsh.bundle.patch, so this package is not a bundle')
-    return undefined
-  }
-  const path = resolve(root, declared)
-  if (!inside(root, path)) {
-    add('patch-declared', 'fail', `bundle patch escapes the package: ${declared}`)
-    return undefined
-  }
-  try {
-    await stat(path)
-  } catch {
-    add('patch-declared', 'fail', `dsh.bundle.patch names a missing file: ${declared}`)
-    return undefined
-  }
-  add('patch-declared', 'pass', `bundle patch: ${declared}`)
-  return path
-}
-
-function checkLocaleExports(manifest, add) {
-  const exports = manifest.exports ?? {}
-  if (typeof exports['./locale/*.json'] === 'string') {
-    add('locale-export', 'pass', 'exports ./locale/*.json')
-  } else {
-    add('locale-export', 'warn', 'no "./locale/*.json" export: Plugin Manager cannot show a localized title or description')
+      const result = await scaffold(merged)
+      return {
+        dest: result.dest,
+        files: result.files,
+        warnings: result.warnings,
+        checks: {
+          ok: result.checks.ok,
+          pass: result.checks.summary.pass,
+          warn: result.checks.summary.warn,
+          fail: result.checks.summary.fail,
+          findings: result.checks.checks
+            .filter(check => check.status !== 'pass')
+            .map(check => `${check.status.toUpperCase()} ${check.id}: ${check.message}`),
+        },
+      }
+    },
   }
 }
 
-async function checkLocaleFiles(root, add) {
-  const directory = join(root, 'locale')
-  let names
-  try {
-    names = await readdir(directory)
-  } catch {
-    add('locale-en', 'warn', 'no locale/ directory: the bundle falls back to package.json name and description')
-    return undefined
-  }
-  const files = names.filter(file => file.endsWith('.json'))
-  if (files.length === 0) {
-    add('locale-en', 'warn', 'locale/ holds no .json dictionary')
-    return undefined
-  }
-  add('locale-files', 'pass', `locale dictionaries: ${files.join(', ')}`)
-
-  const english = files.includes('en.json') ? 'en.json' : files[0]
-  if (english !== 'en.json') {
-    add('locale-en', 'warn', 'no locale/en.json: English falls back to package.json name and description')
-  }
-  let parsed
-  try {
-    parsed = JSON.parse(await readFile(join(directory, english), 'utf8'))
-  } catch (error) {
-    add('locale-en', 'fail', `${english} is not valid JSON: ${message(error)}`)
-    return undefined
-  }
-  const meta = parsed?.meta ?? {}
-  const problems = []
-  if (typeof meta.title !== 'string' || meta.title.length === 0) problems.push('meta.title')
-  if (typeof meta.description !== 'string' || meta.description.length === 0) problems.push('meta.description')
-  if (problems.length > 0) {
-    add('locale-meta', 'warn', `${english} is missing ${problems.join(' and ')}`)
-  } else {
-    add('locale-meta', 'pass', `${english} declares meta.title and meta.description`)
-  }
-  return meta
+function definedOnly(args) {
+  return Object.fromEntries(Object.entries(args).filter(([, value]) => value !== undefined && value !== null))
 }
 
-async function checkIcon(manifest, root, add) {
-  const declared = manifest.icon ?? resolveExport(manifest.exports?.['./icon'])
-  if (typeof declared !== 'string' || declared.length === 0) {
-    add('icon', 'warn', 'no icon declared (package.json "icon" or "./icon" export): the panel draws default artwork')
-    return
-  }
-  const path = resolve(root, declared)
-  if (!inside(root, path)) {
-    add('icon', 'fail', `icon escapes the package: ${declared}`)
-    return
-  }
-  if (!ICON_EXTENSIONS.has(extname(path).toLowerCase())) {
-    add('icon', 'fail', `icon must be SVG, PNG, JPEG, or WebP: ${declared}`)
-    return
-  }
-  let info
-  try {
-    info = await stat(path)
-  } catch {
-    add('icon', 'fail', `declared icon does not exist: ${declared}`)
-    return
-  }
-  if (info.size === 0) {
-    add('icon', 'fail', `icon is empty: ${declared}`)
-    return
-  }
-  if (info.size > MAX_ICON_BYTES) {
-    add('icon', 'fail', `icon is ${info.size} bytes, above the ${MAX_ICON_BYTES}-byte limit: ${declared}`)
-    return
-  }
-  add('icon', 'pass', `icon: ${declared} (${info.size} bytes)`)
+function folderName(packageName) {
+  const base = packageName.includes('/') ? packageName.slice(packageName.lastIndexOf('/') + 1) : packageName
+  return base.length > 0 ? base : 'dsh-plugin-new'
 }
 
-async function checkDetail(meta, root, add) {
-  const declared = meta?.detail
-  if (declared === undefined) return
-  if (typeof declared !== 'string' || declared.length === 0) {
-    add('detail', 'fail', 'meta.detail is not a path string')
-    return
-  }
-  if (!/\.(md|markdown)$/i.test(declared)) {
-    add('detail', 'fail', `meta.detail must end in .md or .markdown: ${declared}`)
-    return
-  }
-  const path = resolve(root, declared)
-  if (!inside(root, path)) {
-    add('detail', 'fail', `meta.detail escapes the package: ${declared}`)
-    return
-  }
-  try {
-    await stat(path)
-  } catch {
-    add('detail', 'fail', `meta.detail names a missing document: ${declared}`)
-    return
-  }
-  add('detail', 'pass', `detail document: ${declared}`)
-}
-
-function checkFilesWhitelist(manifest, add) {
-  const files = manifest.files
-  if (!Array.isArray(files)) {
-    add('files', 'warn', 'no "files" whitelist: a published package would include test output, tmp/, and other artifacts')
-    return
-  }
-  const patch = manifest.dsh?.bundle?.patch
-  const missing = []
-  if (typeof patch === 'string' && !covers(files, patch)) missing.push(patch)
-  if (!files.some(entry => entry === 'locale' || entry === 'locale/*' || entry.startsWith('locale/'))) {
-    missing.push('locale')
-  }
-  if (missing.length > 0) {
-    add('files', 'warn', `"files" omits ${missing.join(', ')}: the packed package would not contain it`)
-    return
-  }
-  add('files', 'pass', `"files" lists ${files.length} entries including the patch and locale`)
-}
-
-/**
- * Line-level sanity check of the patch file. This is not a YAML parse: it only
- * catches the two mistakes that fail silently at install time — a patch that
- * carries no rows, and a row naming a relative module that does not exist.
- */
-async function checkPatchBody(path, root, add) {
-  let text
-  try {
-    text = await readFile(path, 'utf8')
-  } catch (error) {
-    add('patch-body', 'fail', `patch unreadable: ${message(error)}`)
-    return
-  }
-  if (!/^\s*-\s*(insert:|id:)/m.test(text)) {
-    add('patch-body', 'fail', 'patch declares no "insert:" block and no id-targeted row')
-    return
-  }
-  add('patch-body', 'pass', 'patch declares at least one row')
-
-  const relativeNames = [...text.matchAll(/^\s*-?\s*name:\s*['"]?(\.[^'"\s]*)['"]?\s*$/gm)].map(match => match[1])
-  if (relativeNames.length === 0) return
-  const missing = []
-  for (const specifier of relativeNames) {
-    try {
-      await stat(resolve(dirname(path), specifier))
-    } catch {
-      missing.push(specifier)
-    }
-  }
-  if (missing.length > 0) {
-    add('patch-relative', 'fail', `patch names missing relative modules: ${missing.join(', ')}`)
-  } else {
-    add('patch-relative', 'pass', `patch names ${relativeNames.length} relative module(s), all present`)
-  }
-}
-
-function resolveExport(value) {
-  if (typeof value === 'string') return value
-  if (value !== null && typeof value === 'object') {
-    for (const key of ['default', 'import']) {
-      if (typeof value[key] === 'string') return value[key]
-    }
-  }
-  return undefined
-}
-
-function covers(files, target) {
-  const normalized = target.replace(/^\.\//, '')
-  return files.some(entry => {
-    const pattern = entry.replace(/^\.\//, '')
-    if (pattern === normalized) return true
-    if (!pattern.includes('*')) return normalized === pattern || normalized.startsWith(`${pattern}/`)
-    const prefix = pattern.slice(0, pattern.indexOf('*'))
-    return normalized.startsWith(prefix)
-  })
-}
-
-function inside(root, path) {
-  const child = relative(root, path)
-  return child.length > 0 && !child.startsWith('..') && !isAbsolute(child)
-}
-
-function message(error) {
-  return error instanceof Error ? error.message : String(error)
-}
-
-function renderSummary(value) {
+function renderCheck(value) {
   const lines = [`${value.target}: ${value.summary.fail} fail, ${value.summary.warn} warn, ${value.summary.pass} pass`]
   const findings = value.checks.filter(check => check.status !== 'pass')
   if (findings.length === 0) {
     lines.push('Every structural check passed.')
   } else {
     for (const check of findings) lines.push(`${check.status.toUpperCase()} ${check.id}: ${check.message}`)
+  }
+  return lines.join('\n')
+}
+
+function renderNew(value) {
+  const lines = [
+    `Created ${value.dest}`,
+    `Files: ${value.files.join(', ')}`,
+    `Check: ${value.checks.fail} fail, ${value.checks.warn} warn, ${value.checks.pass} pass`,
+  ]
+  for (const finding of value.checks.findings) lines.push(`  ${finding}`)
+  if (value.warnings.length > 0) {
+    lines.push('Before shipping:')
+    for (const warning of value.warnings) lines.push(`  - ${warning}`)
   }
   return lines.join('\n')
 }

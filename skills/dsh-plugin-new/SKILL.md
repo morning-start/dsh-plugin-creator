@@ -1,0 +1,82 @@
+---
+name: dsh-plugin-new
+description: 用标准模板一键生成一个新的 DSH 插件包（bundle）：先问清包名、标题、描述等字段，再调用 dsh_plugin_new 生成，最后按检查报告修完再安装。用户说「新建一个插件」「给我搭个插件骨架」「按模板生成插件」「初始化一个 dsh 插件」时用。
+---
+
+# 一键生成 DSH 插件
+
+生成器是确定性的：同一组参数永远产出同样的文件。所以**不要手写** `package.json` / `cordis.patch.yml` / `index.js`，也不要复制模板再改——调用 `dsh_plugin_new`。
+
+同一份引擎有两个入口，产物逐字节一致：
+
+- 对话里：`dsh_plugin_new` 工具（参数即 schema，不用拼 shell 引号）；
+- 无人对话 / 已有 plan.json：`node scripts/new-bundle.mjs --config plan.json`。
+
+## 1. 一次问完，不要来回磨
+
+必填：
+
+| 字段 | 问法 |
+|---|---|
+| `packageName` | 包名叫什么？全小写，`dsh-plugin-<东西>` 或 `@scope/<东西>`。row id 会从它推出来 |
+| `title` | Plugin Manager 里显示的名字，短、句子式 |
+| `description` | 一句话说清「做什么 + 从哪儿触发」。这段会**原样**显示给用户，别写成营销话术 |
+
+按需（一次问清，别一条一条问）：
+
+- `titleZh` / `descriptionZh`：用户用中文就一起要，会多生成 `locale/zh.json`；
+- `withTool`：要不要一个示例工具（默认要）；
+- `withSkill`：要不要带 Skill（默认不要）；
+- `dest`：生成到哪（默认会话工作目录下的 `<包名>` 目录）。
+
+问完**复述一遍**：包名、row id、工具名 / skill 名、目标目录。用户点头再生成。
+
+## 2. 两个决策要用户拍，不要自己定
+
+**工具给谁用？**
+
+- 模板默认：Host 行注册工具 → **所有预设**的会话都能看到。
+- 只给某一个预设：生成后自己改 `cordis.patch.yml`，覆写那个预设、把工具行挂进它的 `plugins`。要先告诉用户代价：patch 不做深合并，覆写意味着**整段复述**该预设的 plugins，DSH 升级后要重新同步（本仓库的 `cordis.patch.yml` 就是这种写法的现成例子）。
+
+**要不要 Skill？**
+
+`withSkill: true` 会插入一个 `dsh-skill-filesystem` provider。它只扫这个包的 `skills/`，但 skill 目录是**部署级**的：所有预设的会话都会列出来。用户要「只在我的模式里有这个 skill」，就把 provider 行搬进那个预设，别留在 Host 层。
+
+## 3. 生成
+
+```
+dsh_plugin_new({
+  packageName: 'dsh-plugin-my-thing',
+  title: 'My thing',
+  description: '……做什么、从哪儿触发……',
+  titleZh: '……', descriptionZh: '……',   // 中文用户一起给
+  withTool: true, withSkill: false,
+})
+```
+
+`dest` 不给就落在会话工作目录下。目标目录已存在且非空会直接拒绝；确实要覆盖，加 `force: true`（只覆盖模板生成的那些文件，不动别人的）。
+
+## 4. 读报告再动手，别跳过 warn
+
+工具返回自带一次 `dsh_plugin_check`：
+
+- `fail` 必须修。模板本身应该是 0 fail，出现 fail 通常说明输入有问题（包名非法、描述为空）。
+- `warn` 逐条处理，最常见三条：
+  - `icon.svg is a placeholder` → 换成真的图标，否则在插件列表里显示成通用占位图；
+  - `description is short` → Plugin Manager 直接显示这段，补上「做什么 + 怎么触发」；
+  - `withSkill` 的部署级影响 → 见上面第 2 节。
+- 修完可以再跑一次 `dsh_plugin_check`（或 `node scripts/new-bundle.mjs` 里的检查）确认。
+
+## 5. 装与验（说清楚哪些验过、哪些没验）
+
+1. `plugin_manager` `install_bundle` → `target` 给生成的目录；或 `dsh plugin --profile <p> add link:<目录>`。
+2. `dsh --profile <p> --dump-config` 里能看到那一行，且没有 activation 诊断。
+3. **新开**一个会话再验：调一次工具 / 看 skill 目录。已有会话不会变——预设是建会话时解析的。
+4. 页面里的图标、标题、描述是渲染结果，没看到就不要说「显示正常」。
+
+## 6. 不要做的事
+
+- 不要用大写或带空格的包名（npm 不接受，生成器会直接报错）。
+- 不要为了省一步去手写 manifest——手写的那份没有经过检查。
+- 不要在别人已经写过的目录里 `force`，除非用户明确要求。
+- 不要把「生成了」说成「装好了」：生成只写了文件，装是第 5 步。

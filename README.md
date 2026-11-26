@@ -7,9 +7,39 @@ A plugin-development toolkit for DeepSeek Harness (DSH). Installing it adds tool
 | Kind | Name | What it does |
 |---|---|---|
 | Tool | `dsh_plugin_check` | Read-only structural check of a bundle directory: manifest fields, the declared `dsh.bundle.patch`, exported locale and icon resources, the entry module, the declared detail document, the `files` whitelist, and relative module names in the patch. Reports pass / warn / fail per check instead of throwing on the first problem. |
+| Tool | `dsh_plugin_new` | Generates a complete plugin package from the standard template: manifest, bundle patch, entry module, locale dictionaries, icon, README, optionally an example tool and a skill. Deterministic, and it runs `dsh_plugin_check` on its own output before returning. |
+| Skill | `dsh-plugin-new` | The interview behind that tool: which fields to ask for, which decisions belong to the user, and what to do with each warning in the report. |
 | Skill | `dsh-plugin-isolated-test` | How to create, test, debug, and publish a plugin inside a `dsh web` instance with its own `DSH_HOME`, profile, and port — including the traps that produce "installed but not working". |
 
 Everything is mounted inside the Creator-mode preset, so a Standard, PTC, Minimal, or Data-analysis session sees no new tool, no new prompt section, and no new skill.
+
+## Why a tool, a skill, and a CLI — not one of them
+
+Filling a template is deterministic string work; interviewing a user is judgment. Mixing them is what makes template generators unreliable, so the split is:
+
+- **`lib/scaffold.js`** — the engine. Pure, zero-dependency, testable.
+- **`templates/bundle/`** — the template. Files in the package, not skill resources, so they are checked by `dsh_plugin_check` and never drift from what ships.
+- **`scripts/new-bundle.mjs`** — CLI over the engine, for a `plan.json` or a human at a terminal.
+- **`dsh_plugin_new`** — tool over the same engine, so an agent does not hand-quote shell arguments.
+- **`dsh-plugin-new`** — the skill. It only decides what to ask and what to do with the answer.
+
+Selection, not template logic: the template directory holds one file per variant (`index.js.tpl` vs `index.min.js.tpl`, `cordis.patch.yml.tpl` vs `cordis.patch.skill.yml.tpl`), and the engine picks files. Unresolved `{{placeholders}}` after rendering are an error, so a typo in a template fails loudly instead of shipping.
+
+A DSH slash command (`/new-plugin`) is deliberately not included: `commands.register` exists and would be cheap, but a command receives one line of `rawInput`, and the fields here need a conversation — a command would either force `name=... title=...` syntax or just inject a prompt, which is what talking to the agent already does.
+
+### Generate one
+
+```
+dsh_plugin_new  { packageName: 'dsh-plugin-my-thing', title: 'My thing', description: '...' }
+```
+
+```powershell
+node scripts/new-bundle.mjs --name dsh-plugin-my-thing --title "My thing" --description "..." --with-skill
+node scripts/new-bundle.mjs --config plan.json
+node scripts/new-bundle.mjs --dry-run ...      # validate and list files, write nothing
+```
+
+The generated bundle's patch inserts one Host row and patches no preset, so installing it changes no existing preset's composition. Its README documents the two ways to scope a tool or skill to a single preset instead.
 
 ## How "Creator mode only" is implemented
 
@@ -36,12 +66,15 @@ A second consequence worth knowing: if a user later edits Creator mode in the We
 package.json          bundle manifest: exports, files, dsh.bundle.patch
 cordis.patch.yml      the patch layer: Host row + Creator-mode preset override
 index.js              Host half (registers nothing yet; future shared services)
-tools/index.js        preset-scoped half: the dsh_plugin_check tool
+tools/index.js        preset-scoped half: dsh_plugin_check, dsh_plugin_new
+lib/bundle-check.js   the structural checker (shared by both tools)
+lib/scaffold.js       the template engine (shared by the tool and the CLI)
+templates/bundle/     the standard plugin template, one file per variant
 skills/               skills mounted into Creator mode
 locale/{en,zh}.json   Plugin Manager title / description / detail path
 docs/                 detail document + feature image
 icon.svg              plugin icon
-scripts/              dev checks: patch drift, tool smoke test
+scripts/              new-bundle CLI, patch drift check, tool smoke test
 ```
 
 ## Install
@@ -76,9 +109,11 @@ The package is plain ESM with **no dependencies and no build step**, on purpose:
 Two checks need no Host:
 
 ```powershell
-node scripts/try-tool.mjs .        # mount the tools plugin on a stub context and run dsh_plugin_check here
+node scripts/try-tool.mjs .        # mount both tools on a stub context; check this repo, then scaffold into tmp/smoke-output
 node scripts/check-patch.mjs .     # parse cordis.patch.yml and diff it against the shipped preset
 ```
+
+`try-tool.mjs` is the regression test for the template: it fails when the generated bundle does not pass its own structural check, so a template edit that breaks the output is caught without installing anything.
 
 `check-patch.mjs` parses the patch with the same YAML library DSH uses and compares the Creator-mode override with `@deepseek-ai/dsh-web-app/presets/cordis.patch.yml`: dropped rows, changed row order, a changed plan-mode section, and unexpected additions all fail. Against the Desktop install that file lives inside `app.asar`, so run it with the DSH runtime instead of `node`:
 
@@ -100,7 +135,8 @@ dsh --profile iso-powerful --host 127.0.0.1 --port 3099 --no-open
 
 - `scripts/sync-preset.mjs`: regenerate the shipped `preset-cordis` block from the installed DSH, instead of re-copying it by hand.
 - More checks: YAML syntax of the patch (needs a parser), preset declarations, skill frontmatter.
-- A scaffolding tool that writes a new bundle skeleton.
+- Template variants: a client-half bundle (slot registration), and a preset-only bundle that carries its own preset declaration.
+- Optional `/new-plugin` slash command over the same engine, once the `/` menu is confirmed to render in the target host.
 
 ## Attribution
 

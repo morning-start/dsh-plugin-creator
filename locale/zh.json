@@ -1,7 +1,7 @@
 {
   "meta": {
     "title": "插件开发增强",
-    "description": "只在创造模式中增加插件开发相关的帮助：dsh_plugin_check 工具检查一个插件包为什么装不上或显示不出来（清单字段、bundle patch、locale、图标、入口模块、详情文档、打包白名单），dsh-plugin-isolated-test Skill 说明如何在独立 DSH_HOME、独立 profile、独立端口的 dsh web 实例里测试插件。其他预设不受影响。卸载本插件后，工具与 Skill 一并移除，创造模式回落到出厂预设。该工具只读，需要传入插件包的绝对路径；它不按 YAML 解析 patch 文件，因此查不出 YAML 语法错误。",
+    "description": "只在创造模式中增加插件开发相关的帮助：dsh_plugin_new 按标准模板一键生成一个完整插件包；dsh_plugin_check 检查一个插件包为什么装不上或显示不出来（清单字段、bundle patch、locale、图标、入口模块、详情文档、打包白名单）；以及两个 Skill：dsh-plugin-new 负责生成前的问询，dsh-plugin-isolated-test 说明如何在独立 DSH_HOME、独立 profile、独立端口的 dsh web 实例里测试插件。其他预设不受影响。卸载本插件后，工具与 Skill 一并移除，创造模式回落到出厂预设。生成的插件包不覆写任何预设，装上也不会改变已有预设。检查工具只读，需要传入插件包的绝对路径；它不按 YAML 解析 patch 文件，因此查不出 YAML 语法错误。",
     "detail": "docs/DETAIL.zh.md"
   }
 }
