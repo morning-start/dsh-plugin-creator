@@ -5,12 +5,18 @@
     {
       "id": "docs:links",
       "type": "doc-links",
-      "exclude": ["\\.dsh-memory/", "^tmp/"]
+      "exclude": [
+        "\\.dsh-memory/",
+        "^tmp/"
+      ]
     },
     {
       "id": "locale:parity",
       "type": "locale-parity",
-      "files": ["locale/en.json", "locale/zh.json"]
+      "files": [
+        "locale/en.json",
+        "locale/zh.json"
+      ]
     },
     {
       "id": "contract:tools",
@@ -29,6 +35,12 @@
       "path": "package.json",
       "field": "dsh.bundle.patch",
       "equals": "./cordis.patch.yml"
+    },
+    {
+      "id": "contract:ci-template",
+      "type": "contract-drift",
+      "file": "templates/bundle/github-release.yml.tpl",
+      "generator": "node scripts/gen-ci-template.mjs"
     }
   ]
 }

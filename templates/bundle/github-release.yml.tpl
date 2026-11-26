@@ -1,7 +1,8 @@
 name: Release
 
-# Every tag that starts with v cuts a release: the tarball is attached to a GitHub
-# Release, and the registry is updated when a token is configured.
+# Tag-driven release for a DSH plugin package. Copy this file to another plugin
+# as-is: every step works with nothing but package.json, and the ones that need
+# this repository's own tooling are skipped when that tooling is absent.
 #
 #   git tag v1.0.0 && git push origin v1.0.0
 
@@ -12,6 +13,9 @@ on:
 
 permissions:
   contents: write
+  # npm provenance: the registry checks the OIDC identity against the repository,
+  # so the published tarball carries a signed statement of where it was built.
+  id-token: write
 
 concurrency:
   group: release-$\{{ github.ref }}
@@ -44,6 +48,20 @@ jobs:
           node -e "const m=require('./package.json'); if(!m.dsh?.bundle?.patch) { console.error('no dsh.bundle.patch: dsh plugin add would refuse this'); process.exit(1) }"
           node -e "const m=require('./package.json'); if(m.private) console.log('private: the registry step will be skipped')"
 
+      # Optional gate: present only in repositories that ship this toolkit's
+      # scripts. A plain plugin package has no scripts/ and skips both steps.
+      - name: Readiness check (when the toolkit is present)
+        if: hashFiles('scripts/release.mjs') != ''
+        run: node scripts/release.mjs check .
+
+      - name: Suites (when the toolkit is present)
+        if: hashFiles('scripts/release.mjs') != ''
+        run: |
+          for suite in try-tool try-sandbox try-checks try-audit try-generate try-release try-market; do
+            [ -f "scripts/$suite.mjs" ] && node "scripts/$suite.mjs"
+          done
+          [ -f scripts/check-project.mjs ] && node scripts/check-project.mjs .
+
       - name: Pack
         run: |
           npm pack
@@ -64,7 +82,10 @@ jobs:
             echo "package.json is private: skipping npm publish"
             exit 0
           fi
-          npm publish --access public
+          npm publish --provenance --access public
+          if [ -f scripts/release.mjs ]; then
+            node scripts/release.mjs verify . --version "${GITHUB_REF_NAME#v}"
+          fi
 
       - name: Create the GitHub Release
         env:
