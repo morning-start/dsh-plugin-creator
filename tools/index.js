@@ -324,13 +324,23 @@ function sandboxTool(defaultDirectory) {
       properties: {
         action: {
           type: 'string',
-          enum: ['list', 'create', 'start', 'open', 'status', 'fix-workspace', 'stop', 'remove'],
-          description: 'list the sandboxes; create a new one; start it; print the command for the user; probe it; point its workspace at the sandbox copy; stop it; remove it.',
+          enum: ['list', 'create', 'start', 'open', 'status', 'fix-workspace', 'http', 'seed', 'stop', 'remove'],
+          description: 'list the sandboxes; create a new one; start it; print the command for the user; probe it; point its workspace at the sandbox copy; request a path from it; copy data into it; stop it; remove it.',
         },
         name: { type: 'string', description: 'Sandbox name, lowercase letters, digits, and hyphens. Required for every action except list.' },
         project: { type: 'string', description: 'Project root whose tmp/sandboxes holds the sandboxes. Defaults to the session working directory.' },
         plugin: { type: 'string', description: 'For create: the plugin directory to install (link:). Defaults to the project root.' },
         waitMs: { type: 'integer', description: 'For start: how long to wait for the URL before failing. Defaults to 45000.' },
+        path: { type: 'string', description: 'For http: the path to request, e.g. "/api/panel/summary". The session token is added for you.' },
+        method: { type: 'string', description: 'For http: HTTP method. Defaults to GET.' },
+        body: { type: 'string', description: 'For http: request body, sent as JSON.' },
+        entries: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'For seed: entry names inside the source DSH_HOME to copy in, e.g. ["myteam"] or ["skills"]. The source is only read.',
+        },
+        from: { type: 'string', description: 'For seed: the DSH_HOME to copy from. Defaults to ~/.dsh.' },
+        force: { type: 'boolean', description: 'For seed: overwrite existing entries. For stop: kill a listener that is not the recorded process.' },
         confirm: { type: 'boolean', description: 'For remove: must be true. Removing deletes the model credentials added in that sandbox.' },
       },
       required: ['action'],
@@ -438,8 +448,45 @@ function sandboxTool(defaultDirectory) {
           return done(`${name}: ${messages[result]}`, { result })
         }
 
+        case 'http': {
+          const result = await sandboxes.http(name, {
+            path: args.path === undefined ? undefined : String(args.path),
+            method: args.method === undefined ? undefined : String(args.method),
+            body: args.body === undefined ? undefined : String(args.body),
+          })
+          const lines = [`${result.method} ${result.path} → HTTP ${result.status}`]
+          if (result.contentType !== undefined) lines.push(`content-type: ${result.contentType}`)
+          if (result.location !== undefined) lines.push(`location: ${result.location}`)
+          if (result.body.length > 0) lines.push(result.body.slice(0, 1500))
+          if (result.truncated) lines.push('… truncated')
+          return done(lines.join('\n'), result)
+        }
+
+        case 'seed': {
+          const seeded = sandboxes.seed(name, {
+            from: args.from === undefined ? undefined : String(args.from),
+            entries: Array.isArray(args.entries) ? args.entries.map(String) : [],
+            force: args.force === true,
+          })
+          const lines = [`seeded "${name}" from ${seeded.source}`]
+          for (const item of seeded.copied) {
+            lines.push(`  ${item.entry}: ${item.status}${item.warning === undefined ? '' : ` — ${item.warning}`}`)
+          }
+          return done(lines.join('\n'), seeded)
+        }
+
         case 'stop': {
-          const stopped = sandboxes.stop(name)
+          const stopped = sandboxes.stop(name, { force: args.force === true })
+          if (stopped.refused) {
+            return {
+              action,
+              ok: false,
+              summary:
+                `Refusing to stop pid(s) ${stopped.foreign.join(', ')} on port ${stopped.port}: that listener is not the process this sandbox recorded. ` +
+                'It may be the desktop app or another instance. Report it instead of killing it; re-run with force: true only if the user says so.',
+              data: stopped,
+            }
+          }
           return done(
             stopped.stopped.length === 0
               ? `${name}: nothing listening on port ${stopped.port}.`

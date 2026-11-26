@@ -69,6 +69,8 @@ node scripts/sandbox.mjs list
 node scripts/sandbox.mjs create default --plugin .
 node scripts/sandbox.mjs start default             # launch it here, print the URL
 node scripts/sandbox.mjs open default              # print the command for the user
+node scripts/sandbox.mjs http default --path /__myteam/globalLibrary
+node scripts/sandbox.mjs seed default --entries myteam
 node scripts/sandbox.mjs fix-workspace default
 node scripts/sandbox.mjs status default
 node scripts/sandbox.mjs stop default
@@ -78,6 +80,12 @@ node scripts/sandbox.mjs remove default --yes
 The `dsh_sandbox` tool exposes the same actions over `lib/sandbox.js`, and that is the form to prefer from an agent: it works in **any** project (the root comes from the session working directory, not from this package), and it resolves the `dsh` launcher from the Host executable rather than PATH — the desktop app's PATH is not the user's shell PATH.
 
 `start` and `open` differ only in who presses the button. `start` launches the instance and returns its URL, so the agent can probe routes in the same turn; `open` prints the two lines for the user to run themselves. Either way **the model is added by the user, once**, in Settings → Models — the sandbox remembers it.
+
+Three details come from real failures on a plugin UI project:
+
+- **A port is not an identity.** `start` records the pid that actually listens; `stop` kills only that pid and refuses a stranger on the port. Killing "whatever holds the port" once took the user's desktop app down with it.
+- **`http` carries the session token** parsed from the sandbox's own log, so route contracts (401 / 400 / 404 / 405) can be checked without hunting a token out of a page URL. The token is replaced with `{{token}}` in the returned body.
+- **`seed` copies data in, read-only on the source.** An isolated home is empty, so every panel shows an empty state and the interesting rendering is never exercised; seeding `myteam` (or a skills or data directory) from the real `~/.dsh` gives the sandbox real content to render. `.credentials.yaml` can be copied too, and the result says so — borrowed credentials are not verified credentials.
 
 **Model credentials stay with the user.** A sandbox starts with only a browser-session record in `.credentials.yaml`; the page then says "choose a model" and nothing sends. `open` prints the two lines the user runs in their own terminal, and they add the model once in Settings → Models. It lands in that sandbox's home and every later `open` reuses it — no script copies the user's credentials around. `list` reports `model: yes / no` by reading the record names, because the file is never empty in this DSH version (~160 bytes of skeleton even with no model).
 

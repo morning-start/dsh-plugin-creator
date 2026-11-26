@@ -8,6 +8,7 @@
 // parses — so create / start / status / stop are exercised end to end.
 
 import { mkdirSync, readFileSync, rmSync, writeFileSync, existsSync } from 'node:fs'
+import { createServer } from 'node:http'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { Sandboxes, credentialKeys, resolveLauncher } from '../lib/sandbox.js'
@@ -46,7 +47,11 @@ const args = process.argv.slice(2)
 const portIndex = args.indexOf('--port')
 if (portIndex === -1) process.exit(0)
 const port = Number(args[portIndex + 1])
-const server = createServer((request, response) => { response.writeHead(200); response.end('ok') })
+const server = createServer((request, response) => {
+  const ok = (request.url ?? '').includes('token=fake')
+  response.writeHead(ok ? 200 : 401, { 'content-type': 'application/json' })
+  response.end(JSON.stringify({ ok, url: request.url }))
+})
 server.listen(port, '127.0.0.1', () => {
   console.log('dsh web: http://127.0.0.1:' + port + '/?token=fake')
 })
@@ -102,10 +107,47 @@ try {
   const again = await sandboxes.start('dev', { timeoutMs: 5_000 })
   check('starting twice is a no-op', again.alreadyRunning === true)
 
+  console.log('\nhttp')
+  const page = await sandboxes.http('dev', { path: '/' })
+  check('http carries the session token', page.status === 200, `got ${page.status}`)
+  check('http redacts the token from the body', !page.body.includes('token=fake'), page.body)
+  const missing = await sandboxes.http('dev', { path: '/nope', method: 'POST', body: '{}' })
+  check('http honours method and path', missing.status === 200 || missing.status === 401, `got ${missing.status}`)
+
   const stopped = sandboxes.stop('dev')
   check('stop killed a process', stopped.stopped.length > 0)
   const afterStop = await sandboxes.status('dev')
   check('status sees it stopped', afterStop.running === false)
+
+  console.log('\nstop refuses a stranger on the port')
+  const stranger = createServer((request, response) => response.end('not yours'))
+  await new Promise(done => stranger.listen(first.port, '127.0.0.1', done))
+  const refusedStop = sandboxes.stop('dev')
+  check('a listener that is not the recorded process is refused', refusedStop.refused === true, JSON.stringify(refusedStop))
+  check('the stranger survived', refusedStop.stopped.length === 0)
+  await new Promise(done => stranger.close(done))
+
+  console.log('\nseed')
+  const seedSource = join(project, 'seed-home')
+  mkdirSync(join(seedSource, 'myteam', 'roles'), { recursive: true })
+  writeFileSync(join(seedSource, 'myteam', 'roles', 'captain.json'), JSON.stringify({ name: 'captain' }))
+  const seeded = sandboxes.seed('dev', { from: seedSource, entries: ['myteam', 'absent'] })
+  check('seed copies a directory', existsSync(join(project, 'tmp', 'sandboxes', 'dev', 'home', 'myteam', 'roles', 'captain.json')))
+  check('seed reports a missing entry', seeded.copied.find(item => item.entry === 'absent')?.status === 'missing')
+  check('seed leaves the source alone', existsSync(join(seedSource, 'myteam', 'roles', 'captain.json')))
+  await expectError('seeding from the sandbox itself is refused',
+    async () => sandboxes.seed('dev', { from: join(project, 'tmp', 'sandboxes', 'dev', 'home'), entries: ['myteam'] }),
+    /its own home/)
+  const credentialsSeed = sandboxes.seed('dev', { from: seedSource, entries: ['myteam'], force: true })
+  check('force overwrites an existing entry', credentialsSeed.copied[0].status === 'copied')
+
+  console.log('\nlog encoding')
+  const logPath = join(project, 'tmp', 'sandboxes', 'dev', 'open.log')
+  const utf16 = Buffer.concat([Buffer.from([0xff, 0xfe]), Buffer.from('dsh web: http://127.0.0.1:1/?token=utf16\n', 'utf16le')])
+  writeFileSync(logPath, utf16)
+  check('a UTF-16LE log is still parsed', sandboxes.recordedUrl('dev') === 'http://127.0.0.1:1/?token=utf16', String(sandboxes.recordedUrl('dev')))
+  writeFileSync(logPath, 'dsh web: http://127.0.0.1:2/?token=utf8\n')
+  check('a UTF-8 log is still parsed', sandboxes.recordedUrl('dev') === 'http://127.0.0.1:2/?token=utf8')
 
   console.log('\nownership')
   const markerPath = join(project, 'tmp', 'sandboxes', 'dev', 'sandbox.json')

@@ -128,6 +128,11 @@ dsh rescue --from-default-profile web    # 把玩坏的 profile 从出货模板�
 - 这就是「避免其他项目用」的落点：把沙盒文件夹拷到别处、或者从别的项目里指过来，都会被拦下；
 - 页面里那个工作区的标题也会写成 `sandbox <项目名>/<沙盒名>`，多开时一眼看出你在哪个沙盒。
 
+**端口不是身份。** 桌面端自己占着端口（实测 `3081`、`52332`），沙盒只用 `3100-3199` 且按项目内唯一分配。
+`start` 会把真正监听的那个 pid 记进登记表，`stop` 只杀**记过的那一个**：
+端口上坐着别的进程时它会**拒绝**并报出 pid，让你先查清楚——「按端口杀」曾经把用户的桌面端一起打掉过。
+确实要强杀才用 `force`。
+
 `tmp/` 是产物目录，不进 git。每个沙盒的名字、端口、profile 都由登记表管，不要靠记忆。
 **端口按项目内唯一分配**（登记表里占用的端口会跳过），否则两个停着的沙盒会撞在同一个端口上。
 
@@ -274,18 +279,65 @@ Get-Content "<沙盒 home>\.credentials.yaml" | Select-String '^\s{2}\S+:$'
 
 第二种是应急，不是默认：模型凭据是用户的私密信息，不该由脚本长期搬运；而只要沙盒复用，让用户加一次就够了。
 
-### 3.8 停止与清除
+### 3.8 打契约：别去找 token，用 `http`
 
-```powershell
-# 有脚本
-node scripts/sandbox.mjs stop default
-# 手工：按端口停，不按进程名批量杀
-Get-NetTCPConnection -LocalPort 3100 -State Listen | ForEach-Object { Stop-Process -Id $_.OwningProcess -Force }
+路由契约（401 / 400 / 404 / 405、缺参、无活会话要明确拒绝）是「插件坏了」报错里最常见的误判来源。
+沙盒已经把 `?token=` 从自己的日志里解析出来了，直接用它打路径，**不要**去翻浏览器 profile、翻页面源码找 token：
+
+```
+dsh_sandbox { action: 'http', name: 'default', path: '/__myteam/globalLibrary' }
+dsh_sandbox { action: 'http', name: 'default', path: '/api/session/create', method: 'POST', body: '{"type":"client-request",…}' }
 ```
 
-- 交付/收尾时才删沙盒（`node scripts/sandbox.mjs remove default --yes`，或手工删 `tmp/sandboxes/<名字>`）；
-  日常迭代**留着**。
-- 删之前对照一次用户 `~/.dsh` 没有被改动；临时改过的用户状态要还原。
+返回状态码 + `content-type` + 正文前 4000 字符，**正文里出现的 token 会被替换成 `{{token}}`**，不会漏进对话。
+
+判据：401/403 说明认证闸在（这是**活着**的证据，不是失败）；405 说明方法不对；只有 200 才需要继续看数据。
+
+### 3.9 造数据：空态验不出 UI
+
+隔离 home 是空的，所以每块面板都显示空态——而空态几乎验不出问题。要么验的就是空态，要么把真实数据**只读复制**进来：
+
+```
+dsh_sandbox { action: 'seed', name: 'default', entries: ['myteam'] }     # 从 ~/.dsh 复制
+dsh_sandbox { action: 'seed', name: 'default', entries: ['myteam'], from: 'E:/other/home' }
+```
+
+- 源目录**只读**，不动用户的 `~/.dsh`；目标已有的条目不覆盖，除非 `force: true`；
+- 复制的目标是沙盒 home，所以「有数据」的样子在沙盒里是**真数据渲染出来的**，不是 mock；
+- `.credentials.yaml` 也能复制，但那等于借用用户的模型：结果里会带 warning，别把它当成「模型验证过了」；
+- 判据：面板上的数字要能和**磁盘**对上（看板数 == 概览 totals、审计条数 == 账本行数）。
+
+### 3.10 沙盒验不到的部分（别硬说验过）
+
+沙盒能给你实例、URL、token、HTTP 契约、真实数据渲染——但**给不了眼睛**：
+
+- 视觉（深色、窄宽、截断、对比度）需要人看；浏览器控制不可用时就如实写「未验证」，不要自建 mock 页充数；
+- **活会话只能由人在页面里开**：`session.create` 造出的会话不进 `storages/workspace.json` 的 `sessionIds`，
+  左侧栏看不到、点不到，所以会话级 tab / 面板必须让用户点一次「新会话」并发一条消息（见 §5）；
+- 想验「装完第一次打开」的样子，就**新建一个沙盒**（`create fresh`），别去毁正在用的那个。
+
+### 3.11 停止与清除
+
+```
+dsh_sandbox { action: 'stop', name: 'default' }     # 只杀登记表里记过的那个 pid
+dsh_sandbox { action: 'remove', name: 'default', confirm: true }
+```
+
+手工停的时候**先确认那个 pid 是谁**，再杀：
+
+```powershell
+$port = 3100
+Get-NetTCPConnection -LocalPort $port -State Listen | ForEach-Object {
+  $pid = $_.OwningProcess
+  Get-Process -Id $pid | Select-Object Id, ProcessName, Path      # 先看，再决定
+}
+```
+
+- **不要按进程名批量杀**（`Get-Process node | Stop-Process` 会把桌面端一起带走）；
+- 端口上坐的不是你起的那个进程 → **别杀**，先查清楚。桌面端占的是它自己的端口（`3081`、`52332`），
+  沙盒只在 `3100-3199` 里；
+- 交付/收尾时才删沙盒（`remove … --yes`，或手工删 `tmp/sandboxes/<名字>`）；日常迭代**留着**；
+- 删之前对照一次用户 `~/.dsh` 没有被改动；临时改过的用户状态要还原；
 - `tmp/` 是产物目录，别提交。
 
 ## 4. 可重复的工作流（A → F）
@@ -295,8 +347,8 @@ Get-NetTCPConnection -LocalPort 3100 -State Listen | ForEach-Object { Stop-Proce
 | **A 定性** | 先分清"该有"和"在看"：插件在哪个 profile、要看的是哪个实例、那次启动成没成 | 能一句话说清，如"插件在 `web`，我看到的是 `desktop`" |
 | **B 静态** | 语法/单测/`--dump-config`/manifest | 组合树有那一行且未 `disabled`；单测绿 |
 | **C 开沙盒** | 复用已有沙盒（首次才建、才装）；多开一个就新建沙盒，别毁掉在用的 | 打印 URL；`GET /` 有响应（401 也算"活着"） |
-| **D 打契约** | 按路由逐条打：401/400/404/405 + 需要活会话时的明确拒绝 | 错误码与信封都对得上表 |
-| **E 对数据** | 用活会话读一遍，再和磁盘对账（计数、条数、名字） | 至少一处能对上；对不上就是真 bug |
+| **D 打契约** | 用 `dsh_sandbox` 的 `http` 动作按路由逐条打：401/400/404/405 + 需要活会话时的明确拒绝 | 错误码与信封都对得上表 |
+| **E 对数据** | 先 `seed` 真实数据，再用活会话读一遍，和磁盘对账（计数、条数、名字） | 至少一处能对上；对不上就是真 bug |
 | **F 写与回滚** | 先负路径（缺 confirm/篡改令牌），再正路径；发布类先在 `rollback` 沙盒演练回滚 | 负路径被明确拒绝；正路径落盘可核对；回滚后回到原状 |
 
 测试阶梯里"由廉到贵"的顺序不要跳：**静态 → 启动/注册 → HTTP 契约 → 活会话数据 → 客户端注册 → 人眼 → 写面**。
@@ -367,8 +419,8 @@ POST /api/session/create
 
 | 现象 | 根因 | 处置 |
 |---|---|---|
-| 桌面端被顶掉 / 宿主 `exited with …` | 起了桌面端二进制 | 改用 `dsh --profile <p>`；换 `DSH_HOME` |
-| `EADDRINUSE` | 端口被占 | 换端口（或 `--port 0`）；不杀不认识的进程 |
+| 桌面端被顶掉 / 宿主 `exited with …` | 起了桌面端二进制，或第二个实例共用了同一个 `DSH_HOME` | 改用 `dsh --profile <p>` + 独立 `DSH_HOME`（沙盒默认如此）；桌面端占 `3081`、`52332`，别碰 |
+| `EADDRINUSE` | 端口被占（沙盒端口 3100-3199 按项目内唯一分配，撞上说明登记表被手改过） | 换端口（或 `--port 0`）；**不杀不认识的进程**——`stop` 会因为 pid 对不上而拒绝 |
 | `N required plugins did not activate` | 某行插件加载失败，宿主带伤启动 | `--dump-config` 定位 → 装依赖/重建 `lib`/修 patch |
 | 装了但入口不见 | ① 插件在哪个 profile ② 你看哪个实例 ③ 那次启动成没成 | 三问都回答完再查代码 |
 | `401 MT_UNAUTHENTICATED` | 没带会话 cookie | 用**你自己实例**打印的 `?token=` 打开 |

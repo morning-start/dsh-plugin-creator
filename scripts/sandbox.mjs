@@ -135,6 +135,9 @@ async function main() {
       } else {
         console.log(`${name}: listening on ${status.port}, HTTP ${status.http} (401 still means alive)`)
       }
+      if (status.running && status.ours === false) {
+        console.log('note: the listener on that port is not the process this sandbox recorded; `stop` will refuse it')
+      }
       return
     }
 
@@ -153,10 +156,41 @@ async function main() {
 
     case 'stop': {
       if (name === undefined) throw new Error('stop needs a sandbox name')
-      const stopped = sandboxes.stop(name)
-      console.log(stopped.stopped.length === 0
-        ? `${name}: nothing listening on port ${stopped.port}`
-        : `${name}: stopped ${stopped.stopped.length} process(es) on port ${stopped.port}`)
+      const stopped = sandboxes.stop(name, { force: process.argv.includes('--force') })
+      if (stopped.refused) {
+        console.log(`${name}: refusing to stop pid(s) ${stopped.foreign.join(', ')} on port ${stopped.port}.`)
+        console.log('That port is not held by the process this sandbox recorded — it may be the desktop app or')
+        console.log('another instance. Check it, or re-run with --force if you are sure.')
+      } else if (stopped.stopped.length === 0) {
+        console.log(`${name}: nothing listening on port ${stopped.port}`)
+      } else {
+        console.log(`${name}: stopped ${stopped.stopped.length} process(es) on port ${stopped.port}`)
+      }
+      return
+    }
+
+    case 'http': {
+      if (name === undefined) throw new Error('http needs a sandbox name')
+      const result = await sandboxes.http(name, {
+        path: flag('--path'),
+        method: flag('--method'),
+        body: flag('--body'),
+      })
+      console.log(`${result.method} ${result.path} → HTTP ${result.status}${result.contentType === undefined ? '' : ` (${result.contentType})`}`)
+      if (result.location !== undefined) console.log(`location: ${result.location}`)
+      if (result.body.length > 0) console.log(result.body)
+      if (result.truncated) console.log('… truncated')
+      return
+    }
+
+    case 'seed': {
+      if (name === undefined) throw new Error('seed needs a sandbox name')
+      const entries = String(flag('--entries') ?? '').split(',').map(item => item.trim()).filter(item => item.length > 0)
+      const seeded = sandboxes.seed(name, { from: flag('--from'), entries, force: process.argv.includes('--force') })
+      console.log(`seeded "${name}" from ${seeded.source}`)
+      for (const item of seeded.copied) {
+        console.log(`  ${item.entry}: ${item.status}${item.warning === undefined ? '' : ` — ${item.warning}`}`)
+      }
       return
     }
 
@@ -194,7 +228,9 @@ function usage() {
   node scripts/sandbox.mjs open <name>                    print the command for the user
   node scripts/sandbox.mjs status <name>
   node scripts/sandbox.mjs fix-workspace <name>
-  node scripts/sandbox.mjs stop <name>
+  node scripts/sandbox.mjs http <name> [--path /x] [--method GET] [--body <json>]
+  node scripts/sandbox.mjs seed <name> --entries myteam[,skills] [--from <home>] [--force]
+  node scripts/sandbox.mjs stop <name> [--force]
   node scripts/sandbox.mjs remove <name> [--yes]
 
 Sandboxes live in <project>/tmp/sandboxes/<name>/ with their own DSH_HOME,
