@@ -49,11 +49,15 @@ Testing a plugin means running a `dsh web` instance that is not the user's deskt
 <project>/tmp/sandboxes/
   registry.json            name → home / workspace / profile / port
   default/
+    sandbox.json           marker: which project and sandbox this folder is
     home/                  the sandbox's DSH_HOME
     workspace/             the copy sessions actually run in
+    open.log               output of `open --run`; the URL is read from here
 ```
 
 One project holds as many sandboxes as it needs — `default` for daily iteration, `clean` for a from-scratch reproduction, `client` for UI states, `rollback` for rehearsing a rollback. All of them are **reused**, never recreated implicitly: the pnpm install, the profile's plugin versions, and the model credentials live in the sandbox home.
+
+Sandboxes live under the project's own `tmp/`, never in `~/.dsh` or a system temp directory, so they travel with the project and disappear with it. `sandbox.json` is the identity check: its `project` must be this project's root, and `open`, `status`, `stop`, and `remove` refuse a folder whose marker says otherwise — a copied sandbox cannot be adopted by another project by accident. Ports are unique within the project register, so two stopped sandboxes never claim the same port. The page's workspace title reads `sandbox <project>/<name>`, which is how you tell several running sandboxes apart.
 
 ```powershell
 node scripts/sandbox.mjs list

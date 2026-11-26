@@ -91,17 +91,28 @@ dsh rescue --from-default-profile web    # 把玩坏的 profile 从出货模板�
 
 ### 3.0 沙盒长什么样
 
+沙盒**永远在项目自己的 `tmp/` 里**，不放到 `~/.dsh`、也不放到系统临时目录。这样它跟着项目走，
+不会被别的项目拿去用，删项目就一起没了：
+
 ```
 <项目>/tmp/sandboxes/
-  registry.json          沙盒登记表：名字 → home / 工作区 / profile / 端口
+  registry.json          登记表：名字 → home / 工作区 / profile / 端口
   default/
+    sandbox.json         标记：属于哪个项目、哪个沙盒、什么端口（可以跟着文件夹一起被拷走）
     home/                DSH_HOME（storages、profiles、sessions、.credentials.yaml 都在这）
     workspace/           会话真正跑的地方（工作区副本）
     open.log             `open --run` 的输出，URL 从这里读
-  clean/  client/  …
+  clean/  client/  …     每个沙盒一个文件夹，名字就是它的身份
 ```
 
+**标记是硬约束，不是注释。** `sandbox.json` 里的 `project` 必须等于当前项目根目录：
+
+- 标记缺失或指向别的项目 → **拒绝操作**（`open` / `status` / `stop` / `remove` 都会报错并说清原因）；
+- 这就是「避免其他项目用」的落点：把沙盒文件夹拷到别处、或者从别的项目里指过来，都会被拦下；
+- 页面里那个工作区的标题也会写成 `sandbox <项目名>/<沙盒名>`，多开时一眼看出你在哪个沙盒。
+
 `tmp/` 是产物目录，不进 git。每个沙盒的名字、端口、profile 都由登记表管，不要靠记忆。
+**端口按项目内唯一分配**（登记表里占用的端口会跳过），否则两个停着的沙盒会撞在同一个端口上。
 
 有 `scripts/sandbox.mjs` 时（本仓库自带，生成的插件项目也可以拷过去）优先用它：
 
@@ -112,6 +123,9 @@ node scripts/sandbox.mjs open default
 node scripts/sandbox.mjs status default
 node scripts/sandbox.mjs stop default
 ```
+
+`list` 除了列出登记表，还会报两种容易认错的情况：**磁盘上有、登记表里没有的文件夹**（拷来的、
+或旧版本留下的），以及**登记表里有、文件夹已经没了的条目**。看到这两种先处理掉，别在上面继续跑。
 
 没有脚本时，等价的手工步骤在 §3.1 / §3.3；两种做法的判据一样。
 
