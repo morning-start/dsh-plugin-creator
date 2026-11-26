@@ -7,7 +7,7 @@
 // for a real `--port` it listens on that port and prints the URL line the engine
 // parses — so create / start / status / stop are exercised end to end.
 
-import { mkdirSync, readFileSync, rmSync, writeFileSync, existsSync } from 'node:fs'
+import { chmodSync, mkdirSync, readFileSync, rmSync, writeFileSync, existsSync } from 'node:fs'
 import { createServer } from 'node:http'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -225,11 +225,19 @@ try {
   check('an existing command line is not quoted again', launcherHead(commandLineLauncher) === commandLineLauncher)
 
   // End to end: a launcher that really lives under a directory with a space, so
-  // the quoting is exercised by cmd.exe rather than only by the string helper.
+  // the quoting is exercised by the real shell rather than only by the string
+  // helper. The launcher shape is platform-specific: cmd.exe needs a .cmd file,
+  // POSIX needs an executable with a shebang.
   const spaced = join(project, 'space dir')
   mkdirSync(spaced, { recursive: true })
-  const spacedLauncher = join(spaced, 'fake dsh.cmd')
-  writeFileSync(spacedLauncher, `@echo off\r\n"${process.execPath}" "${fakeLauncher}" %*\r\n`)
+  const windows = process.platform === 'win32'
+  const spacedLauncher = join(spaced, windows ? 'fake dsh.cmd' : 'fake dsh')
+  if (windows) {
+    writeFileSync(spacedLauncher, `@echo off\r\n"${process.execPath}" "${fakeLauncher}" %*\r\n`)
+  } else {
+    writeFileSync(spacedLauncher, `#!/bin/sh\nexec "${process.execPath}" "${fakeLauncher}" "$@"\n`)
+    chmodSync(spacedLauncher, 0o755)
+  }
   const spacedSandboxes = new Sandboxes(project, { launcher: spacedLauncher })
   const spacedEntry = await spacedSandboxes.create('spaced', {})
   const spacedName = spacedEntry.name ?? 'spaced'
