@@ -100,11 +100,36 @@ try {
   const bytes = existsSync(shot) ? readFileSync(shot).subarray(0, 4) : Buffer.alloc(0)
   check('it is a PNG', bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e && bytes[3] === 0x47, bytes.toString('hex'))
 
+  console.log('\nrevisiting the same URL')
+  // Navigating to the URL the target is already on does not reliably fire a load
+  // event; reading too early used to return the bare origin as the title.
+  await page.navigate(`${base}/`)
+  const first = await page.evaluate('document.title')
+  check('the first visit has the real title', first === 'ui test', String(first))
+  await page.navigate(`${base}/`)
+  const second = await page.evaluate('document.title')
+  check('a second visit to the same URL still has it', second === 'ui test', String(second))
+  const href = await page.evaluate('location.href')
+  check('the document is the requested one', href.startsWith(`${base}/`), href)
+
   console.log('\nconsole errors')
   await page.navigate(`${base}/error`)
   const broken = await runAssertions(page, [{ id: 'no-errors', noConsoleErrors: true }])
   check('a page error is caught', broken.ok === false)
   check('the message is reported', JSON.stringify(broken.checks).includes('boom'), JSON.stringify(broken.checks))
+
+  console.log('\nunreachable URL')
+  const startedAt = Date.now()
+  let message = ''
+  try {
+    await page.navigate('http://127.0.0.1:1/?token=secret-token')
+  } catch (error) {
+    message = error.message
+  }
+  const elapsed = Date.now() - startedAt
+  check('an unreachable page fails instead of waiting', message.includes('could not be loaded'), message || '(no error)')
+  check('it fails fast', elapsed < 8000, `${elapsed}ms`)
+  check('the message redacts the token', !message.includes('secret-token'), message)
 
   await page.close()
   page = undefined
