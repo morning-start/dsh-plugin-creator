@@ -10,19 +10,27 @@ Generated from the `dsh-plugin-powerful` bundle template.
 
 ## Install
 
-```
-plugin_manager  action: install_bundle  target: <this directory>
-```
-
-or from a shell in the profile:
+**This bundle is under development, so it goes into a sandbox first.** Installing a
+local bundle into the environment you actually work in risks a host that boots with a
+broken composition; a sandbox makes that cost nothing.
 
 ```
-dsh plugin --profile <profile> add link:<this directory>
+node scripts/sandbox.mjs create dev --plugin <this directory>
+node scripts/sandbox.mjs open dev
 ```
 
-A local directory install links this checkout, so later edits are picked up
-without reinstalling — but a changed module needs a restart to load a fresh
-module generation.
+Then add a model once in the page (Settings → Models); the sandbox keeps it, so later
+runs are just `open dev`.
+
+Installing into the current environment is a deliberate step, not the default:
+
+- publish it and install by registry spec, or
+- the user explicitly decides to link it here, and sets `DSH_ALLOW_LOCAL_PLUGIN_INSTALL=1`
+  for the host before restarting (the install guard in `dsh-plugin-powerful` refuses a
+  local bundle install otherwise).
+
+A local directory install links this checkout, so later edits are picked up without
+reinstalling — but a changed module needs a restart to load a fresh module generation.
 
 ## Verify
 

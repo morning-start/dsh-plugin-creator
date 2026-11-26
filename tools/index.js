@@ -14,7 +14,8 @@
  */
 
 import { readFile } from 'node:fs/promises'
-import { resolve } from 'node:path'
+import { existsSync, readFileSync } from 'node:fs'
+import { isAbsolute, join, resolve } from 'node:path'
 import { inspectBundle } from '../lib/bundle-check.js'
 import { scaffold } from '../lib/scaffold.js'
 
@@ -28,6 +29,105 @@ export const inject = ['tools']
 export function apply(ctx) {
   ctx.effect(() => ctx.tools.register(pluginCheck), 'dsh-plugin-powerful/dsh_plugin_check')
   ctx.effect(() => ctx.tools.register(pluginNew(() => sessionDirectory(ctx))), 'dsh-plugin-powerful/dsh_plugin_new')
+  ctx.effect(() => ctx.tools.guard(localInstallGuard), 'dsh-plugin-powerful/no-local-install')
+}
+
+/* ------------------------------------------------------------------ *
+ * Guard: never install a plugin under development into this environment.
+ *
+ * A bundle being developed is installed from a local directory or a `link:`
+ * spec. That belongs in a sandbox, where a broken patch, a half-written module,
+ * or a crashed activation costs nothing. Installing it here — the profile the
+ * user actually works in — risks a host that boots with a broken composition.
+ *
+ * The guard covers the two paths an agent has: the `plugin_manager` tool and a
+ * shell `dsh plugin add`. It does not cover a human typing in their own
+ * terminal, and it is not a security boundary: it is an accident brake with a
+ * documented release valve.
+ * ------------------------------------------------------------------ */
+
+/** Marker written by scripts/sandbox.mjs into every sandbox folder. */
+const SANDBOX_MARKER = 'dsh-plugin-powerful/sandbox'
+
+/** Explicit, user-owned override; the agent must ask before using it. */
+const OVERRIDE_ENV = 'DSH_ALLOW_LOCAL_PLUGIN_INSTALL'
+
+const DENIAL = [
+  'Refusing to install a plugin under development into this environment.',
+  'A local bundle (a directory target, `link:`, or `file:`) belongs in a sandbox:',
+  '  node scripts/sandbox.mjs create <name> --plugin <dir>',
+  '  node scripts/sandbox.mjs open <name>',
+  'Installing a published version by registry spec is fine here.',
+  `If the user explicitly wants it in the current environment, they can set ${OVERRIDE_ENV}=1 and restart.`,
+].join('\n')
+
+/**
+ * Deny a local bundle install unless this host is itself a sandbox.
+ * @param {Readonly<import('@deepseek-ai/dsh-tools').ToolExecution>} exec - pending call.
+ * @returns {string | undefined} denial reason, or undefined to allow.
+ */
+function localInstallGuard(exec) {
+  if (process.env[OVERRIDE_ENV] === '1') return undefined
+  if (isSandboxHost()) return undefined
+
+  if (exec.name === 'plugin_manager') {
+    const args = asRecord(exec.arguments)
+    if (args.action !== 'install_bundle') return undefined
+    return isLocalTarget(args.target) ? DENIAL : undefined
+  }
+
+  if (exec.name === 'pwsh' || exec.name === 'bash' || exec.name === 'terminal') {
+    const command = asRecord(exec.arguments).command
+    if (typeof command !== 'string') return undefined
+    if (!installsFromLocalPath(command)) return undefined
+    return targetsSandbox(command) ? undefined : DENIAL
+  }
+
+  return undefined
+}
+
+/**
+ * True when this Host is running from a sandbox created by `scripts/sandbox.mjs`:
+ * the home's parent folder carries the marker, or the home lives under a
+ * `tmp/sandboxes/` tree.
+ */
+function isSandboxHost() {
+  const home = process.env.DSH_HOME
+  if (home === undefined || home.length === 0) return false
+  const markerPath = join(home, '..', 'sandbox.json')
+  if (existsSync(markerPath)) {
+    try {
+      return JSON.parse(readFileSync(markerPath, 'utf8')).marker === SANDBOX_MARKER
+    } catch {
+      // Fall through to the path check.
+    }
+  }
+  return /[\\/]tmp[\\/]sandboxes[\\/][^\\/]+[\\/]?$/.test(home.replace(/[\\/]+$/, ''))
+}
+
+function isLocalTarget(target) {
+  if (typeof target !== 'string') return false
+  const value = target.trim()
+  if (value.length === 0) return false
+  if (/^(link|file):/i.test(value)) return true
+  if (isAbsolute(value)) return true
+  return /^\.{1,2}[\\/]/.test(value)
+}
+
+/** `dsh plugin ... add ...` with a local spec, anywhere in a shell command. */
+function installsFromLocalPath(command) {
+  if (!/(?:^|[\s;&|(])dsh(?:\.cmd|\.exe)?\s+plugin\b/.test(command)) return false
+  if (!/\badd\b/.test(command)) return false
+  return /(?:^|\s)(?:link:|file:)/i.test(command) || /(?:^|\s)(?:\.{1,2}[\\/]|[A-Za-z]:[\\/])/.test(command)
+}
+
+/** A command aimed at a sandbox profile or sandbox home is allowed. */
+function targetsSandbox(command) {
+  return /--profile\s+["']?sb-[a-z0-9-]+/i.test(command) || /tmp[\\/]sandboxes[\\/]/i.test(command)
+}
+
+function asRecord(value) {
+  return value !== null && typeof value === 'object' ? value : {}
 }
 
 /** The session's working directory, when the deployment provides the service. */

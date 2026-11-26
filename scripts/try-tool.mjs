@@ -1,5 +1,6 @@
-// Smoke-test the tools without a Host: mount the plugin on a stub context, then
-// run each registered tool. Plain node is enough (built-ins only).
+// Smoke-test the tools and the install guard without a Host: mount the plugin
+// on a stub context, then run each registered tool and each guard case.
+// Plain node is enough (built-ins only).
 //
 //   node scripts/try-tool.mjs [bundle-directory]
 //
@@ -7,6 +8,7 @@
 // dsh_plugin_check inspects. dsh_plugin_new always writes to tmp/smoke-output,
 // which is git-ignored.
 
+import { mkdirSync, rmSync, writeFileSync } from 'node:fs'
 import { rm } from 'node:fs/promises'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -17,6 +19,7 @@ const target = process.argv[2] ?? repo
 const output = join(repo, 'tmp', 'smoke-output')
 
 const registered = new Map()
+const guards = []
 const ctx = {
   effect: (body) => body(),
   get: () => undefined,
@@ -25,13 +28,18 @@ const ctx = {
       registered.set(definition.name, definition)
       return () => registered.delete(definition.name)
     },
+    guard: (guard) => {
+      guards.push(guard)
+      return () => guards.splice(guards.indexOf(guard), 1)
+    },
   },
 }
 
 apply(ctx)
 const names = [...registered.keys()].sort()
 if (names.length !== 2) throw new Error(`expected 2 tools, got ${names.join(', ') || 'none'}`)
-console.log(`registered: ${names.join(', ')}\n`)
+if (guards.length !== 1) throw new Error(`expected 1 guard, got ${guards.length}`)
+console.log(`registered: ${names.join(', ')} (+1 guard)\n`)
 
 const check = registered.get('dsh_plugin_check')
 const checkValue = await check.execute({ path: target })
@@ -51,4 +59,73 @@ console.log(create.output.render({}, createValue)[0].text)
 
 if (!createValue.checks.ok) throw new Error('the generated bundle did not pass its own structural check')
 if (!checkValue.ok) throw new Error(`${target} failed its structural check`)
-console.log('\nsmoke ok')
+
+// --- install guard ---------------------------------------------------------
+const guard = guards[0]
+const originalHome = process.env.DSH_HOME
+const originalOverride = process.env.DSH_ALLOW_LOCAL_PLUGIN_INSTALL
+
+function verdict(exec) {
+  const result = guard(exec)
+  return result === undefined ? 'allow' : 'deny'
+}
+
+const sandboxHome = join(repo, 'tmp', 'guard-sandbox', 'home')
+mkdirSync(sandboxHome, { recursive: true })
+writeFileSync(join(repo, 'tmp', 'guard-sandbox', 'sandbox.json'), JSON.stringify({ marker: 'dsh-plugin-powerful/sandbox' }))
+
+const cases = [
+  ['plugin_manager install_bundle link:', { name: 'plugin_manager', arguments: { action: 'install_bundle', target: 'link:E:/Workplace/x' } }, 'deny'],
+  ['plugin_manager install_bundle absolute path', { name: 'plugin_manager', arguments: { action: 'install_bundle', target: 'E:/Workplace/x' } }, 'deny'],
+  ['plugin_manager install_bundle relative path', { name: 'plugin_manager', arguments: { action: 'install_bundle', target: './x' } }, 'deny'],
+  ['plugin_manager install_bundle registry spec', { name: 'plugin_manager', arguments: { action: 'install_bundle', target: 'dshmarket@1.84.1' } }, 'allow'],
+  ['plugin_manager set_bundle', { name: 'plugin_manager', arguments: { action: 'set_bundle', target: 'link:E:/x' } }, 'allow'],
+  ['pwsh dsh plugin add link: to the desktop profile', { name: 'pwsh', arguments: { command: 'dsh plugin --profile desktop add link:E:/Workplace/x' } }, 'deny'],
+  ['pwsh dsh plugin add link: with no profile', { name: 'pwsh', arguments: { command: 'dsh plugin add link:E:/Workplace/x' } }, 'deny'],
+  ['pwsh dsh plugin add link: to a sandbox profile', { name: 'pwsh', arguments: { command: 'dsh plugin --profile sb-default add link:E:/Workplace/x' } }, 'allow'],
+  ['pwsh with a sandbox home', { name: 'pwsh', arguments: { command: '$env:DSH_HOME="E:/p/tmp/sandboxes/default/home"; dsh plugin --profile sb-default add link:E:/x' } }, 'allow'],
+  ['pwsh reading a plugin manager log', { name: 'pwsh', arguments: { command: 'Get-Content log.txt | Select-String "dsh plugin"' } }, 'allow'],
+  ['read tool', { name: 'read', arguments: { file_path: 'E:/x' } }, 'allow'],
+]
+
+process.env.DSH_HOME = join(repo, 'tmp', 'not-a-sandbox')
+delete process.env.DSH_ALLOW_LOCAL_PLUGIN_INSTALL
+const failures = []
+for (const [label, exec, expected] of cases) {
+  const actual = verdict(exec)
+  if (actual !== expected) failures.push(`${label}: expected ${expected}, got ${actual}`)
+}
+console.log(`\nguard (current environment): ${cases.length - failures.length}/${cases.length} cases as expected`)
+
+// Inside a sandbox host, the same local install must be allowed.
+process.env.DSH_HOME = sandboxHome
+const inSandbox = [
+  ['plugin_manager install_bundle link: inside a sandbox', { name: 'plugin_manager', arguments: { action: 'install_bundle', target: 'link:E:/Workplace/x' } }, 'allow'],
+  ['pwsh dsh plugin add link: inside a sandbox', { name: 'pwsh', arguments: { command: 'dsh plugin add link:E:/Workplace/x' } }, 'allow'],
+]
+for (const [label, exec, expected] of inSandbox) {
+  const actual = verdict(exec)
+  if (actual !== expected) failures.push(`${label}: expected ${expected}, got ${actual}`)
+}
+console.log(`guard (sandbox host): ${inSandbox.length} cases checked`)
+
+// The documented release valve.
+process.env.DSH_HOME = join(repo, 'tmp', 'not-a-sandbox')
+process.env.DSH_ALLOW_LOCAL_PLUGIN_INSTALL = '1'
+if (verdict({ name: 'plugin_manager', arguments: { action: 'install_bundle', target: 'link:E:/x' } }) !== 'allow') {
+  failures.push('override: expected allow with DSH_ALLOW_LOCAL_PLUGIN_INSTALL=1')
+}
+console.log('guard (override): checked')
+
+if (originalHome === undefined) delete process.env.DSH_HOME
+else process.env.DSH_HOME = originalHome
+if (originalOverride === undefined) delete process.env.DSH_ALLOW_LOCAL_PLUGIN_INSTALL
+else process.env.DSH_ALLOW_LOCAL_PLUGIN_INSTALL = originalOverride
+rmSync(join(repo, 'tmp', 'guard-sandbox'), { recursive: true, force: true })
+
+if (failures.length > 0) {
+  console.error(`\nGUARD FAILURES:\n- ${failures.join('\n- ')}`)
+  process.exitCode = 1
+} else {
+  console.log('\nsmoke ok')
+}

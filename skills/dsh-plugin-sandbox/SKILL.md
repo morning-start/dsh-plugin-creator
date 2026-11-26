@@ -65,6 +65,23 @@ description: "插件沙盒测试：用 dsh web（不是桌面端）在沙盒里�
 6. **沙盒复用，别每次重建**：沙盒名写进命令或脚本常量，跑第二遍时**保留**它。
    只有症状要求"从零开始"（怀疑沙盒被上次污染）才重建，并且重建前想清楚会丢掉什么（见 §3.4）。
 
+### 1.1 开发中的插件**不许**装进当前环境
+
+这是硬规则，不是建议。**开发中的插件 = 从本地目录装的包**（`plugin_manager install_bundle` 的 target 是目录、
+`link:` 或 `file:`；或 `dsh plugin add link:...`）。它只许进沙盒：
+
+- 当前环境崩在插件上是**你自己修的坑**：一个坏 patch 会让宿主带伤启动，用户下次开会话就撞上；
+- 沙盒里同样的失败只花掉一次重启。
+
+`dsh-plugin-powerful` 自带的 guard 会**直接拒绝**这两种调用（`plugin_manager` 的 `install_bundle` 本地 target、
+`pwsh`/`bash`/`terminal` 里的 `dsh plugin … add link:` 或本地路径），除非：
+
+- 这个宿主**本身就是沙盒**（`DSH_HOME` 指向带 `sandbox.json` 标记的沙盒，或路径在 `tmp/sandboxes/` 下）——沙盒里随便装；
+- 或者用户**明确要求**装进当前环境，并且自己设了 `DSH_ALLOW_LOCAL_PLUGIN_INSTALL=1`。
+
+被拒之后**不要**去找绕过办法（换工具、拆命令、改路径写法）：去问用户，或者改用沙盒。
+装到当前环境的正当路径只有两条：**发布后按版本号装**，或者**用户自己拍板并开了开关**。
+
 ## 2. dsh / profile 速查
 
 ```powershell

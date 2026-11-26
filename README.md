@@ -72,6 +72,23 @@ node scripts/sandbox.mjs remove default --yes
 
 **Model credentials stay with the user.** A sandbox starts with only a browser-session record in `.credentials.yaml`; the page then says "choose a model" and nothing sends. `open` prints the two lines the user runs in their own terminal, and they add the model once in Settings → Models. It lands in that sandbox's home and every later `open` reuses it — no script copies the user's credentials around. `list` reports `model: yes / no` by reading the record names, because the file is never empty in this DSH version (~160 bytes of skeleton even with no model).
 
+## Install
+
+This bundle is itself a development checkout, so it follows its own rule: install it into a sandbox first (`node scripts/sandbox.mjs create default --plugin .`), and install it into the profile you work in only when you have decided to — see the guard below.
+
+## A plugin under development never lands in the current environment
+
+Creator mode registers a `ctx.tools.guard()` that refuses a local bundle install:
+
+- `plugin_manager` with `action: install_bundle` and a directory, `link:`, or `file:` target;
+- `pwsh`, `bash`, or `terminal` running `dsh plugin … add` with a local path or `link:`.
+
+It allows three cases on purpose: a registry spec (`name@version`) — publishing is the sanctioned way to ship; a host that **is** a sandbox (its `DSH_HOME` sits under a folder carrying `sandbox.json`, or under `tmp/sandboxes/`), where installing is the whole point; and an explicit user decision, expressed as `DSH_ALLOW_LOCAL_PLUGIN_INSTALL=1` on the host before a restart.
+
+The reasoning is asymmetric risk: a broken patch in a sandbox costs one restart, and the same patch in the profile the user actually works in means a host that boots with a broken composition. A guard, rather than a rule in a skill, because a rule is advice the model may skip under pressure.
+
+Limits, stated plainly: it does not cover a human typing `dsh plugin add` in their own terminal, and it is not a security boundary — it is an accident brake. `scripts/try-tool.mjs` runs 13 guard cases (deny, allow, sandbox host, override) so a change to the matcher is caught.
+
 ## How "Creator mode only" is implemented
 
 The bundle patch (`cordis.patch.yml`) overrides the shipped `preset-cordis` row and appends two rows to its plugin list:
