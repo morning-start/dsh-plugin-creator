@@ -1,6 +1,6 @@
 # dsh-plugin-powerful
 
-A plugin-development toolkit for DeepSeek Harness (DSH). Installing it adds tools and skills to **Creator mode (创造模式, the `cordis` preset)** and to nothing else. Removing it takes everything back out.
+A plugin-development toolkit for DeepSeek Harness (DSH). Installing it extends **Creator mode (创造模式, the `cordis` preset)** and nothing else; removing it takes everything back out.
 
 ## What this project is
 
@@ -10,17 +10,23 @@ Where it stands today, stated plainly: **project start** and **functional testin
 
 The first design rule: **Creator mode's own tools are this plugin's foundation.** Before adding anything, read what the preset already ships (`dsh --profile <p> --dump-config`, `cordis_inspect_*`) instead of re-implementing it. Installing and enabling is `plugin_manager`'s job; runtime truth comes from Inspect, not from reading source; anything that is judgment belongs in a skill. The full statement — the six-stage capability table with its gaps, the 32 shipped plugins grouped by what each means for the design, and the four design principles — is in [docs/PHILOSOPHY.md](docs/PHILOSOPHY.md) (Chinese).
 
-## What it adds
+## What it gives you
 
-| Kind | Name | What it does |
-|---|---|---|
-| Tool | `dsh_plugin_check` | Read-only structural check of a bundle directory: manifest fields, the declared `dsh.bundle.patch`, exported locale and icon resources, the entry module, the declared detail document, the `files` whitelist, and relative module names in the patch. Reports pass / warn / fail per check instead of throwing on the first problem. |
-| Tool | `dsh_plugin_new` | Generates a complete plugin package from the standard template: manifest, bundle patch, entry module, locale dictionaries, icon, README, optionally an example tool and a skill. Deterministic, and it runs `dsh_plugin_check` on its own output before returning. |
-| Tool | `dsh_sandbox` | Manages the project's test sandboxes: list, create, start, status, fix-workspace, stop, remove. `start` launches one and returns its URL so the agent can probe it in the same turn; `open` prints the command for the user, who adds a model once. |
-| Skill | `dsh-plugin-new` | The interview behind that tool: which fields to ask for, which decisions belong to the user, and what to do with each warning in the report. |
-| Skill | `dsh-plugin-sandbox` | 插件沙盒测试: how to test a plugin in `dsh web` sandboxes — one project can hold several, each with its own `DSH_HOME`, profile, port, and workspace copy, all reused across runs. Includes the traps that produce "installed but not working". |
+Capabilities, not a feature list. Which tool implements which capability — with its parameters, actions, and limits — is in [docs/TOOLS.md](docs/TOOLS.md).
 
-Everything is mounted inside the Creator-mode preset, so a Standard, PTC, Minimal, or Data-analysis session sees no new tool, no new prompt section, and no new skill.
+**Start a plugin from a standard template.** One call produces the manifest, the bundle patch, the entry module, locale dictionaries, an icon, a README, and optionally an example tool and a skill. Deterministic: the same input always produces the same files. It validates its own output before returning, so the structural report arrives in the same turn as the plugin.
+
+**Know why a package will not install or will not show up.** A read-only structural check reports every problem it finds instead of throwing on the first one: manifest fields, the declared bundle patch, exported locale and icon resources, the entry module, the declared detail document, the packaging whitelist. Each check is pass / warn / fail.
+
+**Keep a plugin under development out of the environment you work in.** Installing from a local directory is refused, with three deliberate exceptions: a published version, a host that is itself a sandbox, or an explicit decision by the user. The risk is asymmetric — a broken patch in a sandbox costs one restart, the same patch in the working profile costs a host that boots broken — so this is a guard, not advice.
+
+**Test a plugin in a sandbox instead of the desktop app.** A project can hold several isolated instances — daily iteration, a clean reproduction, client UI states, a rollback rehearsal — each with its own home, profile, port, and workspace copy. They are reused rather than rebuilt, they carry a marker so one project's sandbox cannot be adopted by another, and they can be launched, probed over HTTP, seeded with real data, and stopped without touching anything the user is running.
+
+**Generate any structured content from a template.** The plugin scaffold is one instance of a general capability: a scheme is data (variables, file mapping, conditions, rules) plus templates, so a new scheme is a directory rather than a new generator. See [docs/SCHEMES.md](docs/SCHEMES.md).
+
+**Judgment where it belongs.** Two skills carry what a tool cannot: which questions to ask before generating a plugin, and how to test one without producing fake evidence.
+
+Everything is mounted inside the Creator-mode preset, so a Standard, PTC, Minimal, or Data-analysis session sees nothing new.
 
 ## Schemes: template + config + command
 
@@ -35,7 +41,7 @@ lib/rules.js           declarative structure checks
 lib/scaffold.js        the bundle scheme: derive hooks + the deep bundle check
 ```
 
-The engine knows nothing about plugins. That is what makes a new scheme a directory instead of a new generator: describe the variables, map the files, declare the invariants, and the same `dsh_plugin_new` tool and `new-bundle` CLI will drive it (`--recipe <dir>` / `{ recipe }`).
+The engine knows nothing about plugins. That is what makes a new scheme a directory instead of a new generator: describe the variables, map the files, declare the invariants, and the existing entry points drive it unchanged.
 
 Three properties are enforced rather than documented, because they are what makes generators untrustworthy:
 
@@ -47,19 +53,16 @@ JSON is rendered from a template too, with `{{name|json}}` for escaping, so "wha
 
 The full format — every variable field, the `when` grammar, the rule types, and how to add a scheme — is in [docs/SCHEMES.md](docs/SCHEMES.md).
 
-## Why a tool, a skill, and a CLI — not one of them
+## Why a layer split, and not one entry point
 
-Filling a template is deterministic string work; interviewing a user is judgment. Mixing them is what makes template generators unreliable, so the split is:
+Filling a template is deterministic string work; interviewing a user is judgment. Mixing them is what makes template generators unreliable, so every capability here is built the same way:
 
-- **`lib/scaffold.js`** — the bundle scheme. Its structure is data in `templates/bundle/recipe.json`; only the derived values live in code.
-- **`templates/bundle/`** — the template. Files in the package, not skill resources, so they are checked by `dsh_plugin_check` and never drift from what ships.
-- **`scripts/new-bundle.mjs`** — CLI over the engine, for a `plan.json` or a human at a terminal.
-- **`dsh_plugin_new`** — tool over the same engine, so an agent does not hand-quote shell arguments.
-- **`dsh-plugin-new`** — the skill. It only decides what to ask and what to do with the answer.
+- **an engine** (`lib/`) — pure, dependency-free, testable, with no idea what a plugin is;
+- **a scheme** (`templates/`) — the structure as data: variables, file mapping, conditions, rules;
+- **two fronts** — an agent-facing tool and a human-facing CLI over the same engine, so neither has to re-implement it;
+- **a skill** — the judgment the engine must not encode: what to ask, what to decide, what counts as verified.
 
-The sandbox follows the same shape, with one layer fewer: `lib/sandbox.js` is the engine, `scripts/sandbox.mjs` and the `dsh_sandbox` tool are its two fronts, and the `dsh-plugin-sandbox` skill holds the judgment (which sandbox, when to rebuild, what counts as tested). There is no template layer, because a sandbox renders no files — inventing one would be ceremony.
-
-The tool front is not decoration: it is what makes the automation work outside this repository (the project root comes from the session, not from this package) and what makes it independent of PATH (the launcher is derived from the Host executable).
+The tool front is not decoration: it is what makes the automation work outside this repository (the project root comes from the session, not from this package) and what makes it independent of PATH (the launcher is derived from the Host executable). The sandbox follows the same shape with one layer fewer — it renders no files, so a template layer would be ceremony.
 
 Selection, not template logic: the template directory holds one file per variant (`index.js.tpl` vs `index.min.js.tpl`, `cordis.patch.yml.tpl` vs `cordis.patch.skill.yml.tpl`), and the engine picks files. Unresolved `{{placeholders}}` after rendering are an error, so a typo in a template fails loudly instead of shipping.
 
@@ -67,15 +70,7 @@ A DSH slash command (`/new-plugin`) is deliberately not included: `commands.regi
 
 ### Generate one
 
-```
-dsh_plugin_new  { packageName: 'dsh-plugin-my-thing', title: 'My thing', description: '...' }
-```
-
-```powershell
-node scripts/new-bundle.mjs --name dsh-plugin-my-thing --title "My thing" --description "..." --with-skill
-node scripts/new-bundle.mjs --config plan.json
-node scripts/new-bundle.mjs --dry-run ...      # validate and list files, write nothing
-```
+Ask the agent in Creator mode for a plugin and it will interview you first; or drive the engine from a plan file. Invocations, fields, and flags are in [docs/TOOLS.md](docs/TOOLS.md).
 
 The generated bundle's patch inserts one Host row and patches no preset, so installing it changes no existing preset's composition. Its README documents the two ways to scope a tool or skill to a single preset instead.
 
@@ -95,49 +90,25 @@ Testing a plugin means running a `dsh web` instance that is not the user's deskt
 
 One project holds as many sandboxes as it needs — `default` for daily iteration, `clean` for a from-scratch reproduction, `client` for UI states, `rollback` for rehearsing a rollback. All of them are **reused**, never recreated implicitly: the pnpm install, the profile's plugin versions, and the model credentials live in the sandbox home.
 
-Sandboxes live under the project's own `tmp/`, never in `~/.dsh` or a system temp directory, so they travel with the project and disappear with it. `sandbox.json` is the identity check: its `project` must be this project's root, and `open`, `status`, `stop`, and `remove` refuse a folder whose marker says otherwise — a copied sandbox cannot be adopted by another project by accident. Ports are unique within the project register, so two stopped sandboxes never claim the same port. The page's workspace title reads `sandbox <project>/<name>`, which is how you tell several running sandboxes apart.
+Sandboxes live under the project's own `tmp/`, never in `~/.dsh` or a system temp directory, so they travel with the project and disappear with it. `sandbox.json` is the identity check: its `project` must be this project's root, and every operation refuses a folder whose marker says otherwise — a copied sandbox cannot be adopted by another project by accident. Ports are unique within the project register, so two stopped sandboxes never claim the same port. The page's workspace title reads `sandbox <project>/<name>`, which is how you tell several running sandboxes apart.
 
-```powershell
-node scripts/sandbox.mjs list
-node scripts/sandbox.mjs create default --plugin .
-node scripts/sandbox.mjs start default             # launch it here, print the URL
-node scripts/sandbox.mjs open default              # print the command for the user
-node scripts/sandbox.mjs http default --path /__myteam/globalLibrary
-node scripts/sandbox.mjs seed default --entries myteam
-node scripts/sandbox.mjs fix-workspace default
-node scripts/sandbox.mjs status default
-node scripts/sandbox.mjs stop default
-node scripts/sandbox.mjs remove default --yes
-```
+Three behaviours come from real failures on a plugin UI project:
 
-The `dsh_sandbox` tool exposes the same actions over `lib/sandbox.js`, and that is the form to prefer from an agent: it works in **any** project (the root comes from the session working directory, not from this package), and it resolves the `dsh` launcher from the Host executable rather than PATH — the desktop app's PATH is not the user's shell PATH.
+- **A port is not an identity.** Launching records the pid that actually listens, and stopping kills only that pid — a stranger holding the port is reported and left alone. Killing "whatever holds the port" once took the user's desktop app down with it.
+- **Contract checks carry the session token.** Routes are requested with the token the sandbox parsed from its own log, so 401 / 400 / 404 / 405 can be checked without hunting a token out of a page URL; the token is redacted from anything returned.
+- **Seeding beats an empty home.** An isolated home is empty, so every panel shows an empty state and the interesting rendering is never exercised; named entries can be copied in from the real `~/.dsh`, read-only on the source. Model credentials can be copied too, and the result says so — borrowed credentials are not verified credentials.
 
-`start` and `open` differ only in who presses the button. `start` launches the instance and returns its URL, so the agent can probe routes in the same turn; `open` prints the two lines for the user to run themselves. Either way **the model is added by the user, once**, in Settings → Models — the sandbox remembers it.
+**Model credentials stay with the user.** A sandbox starts with only a browser-session record in `.credentials.yaml`; the page then says "choose a model" and nothing sends. The user adds one once in Settings → Models, it lands in that sandbox's home, and every later run reuses it — no script copies the user's credentials around. The register reports `model: yes / no` by reading record names, because the file is never empty in this DSH version (~160 bytes of skeleton even with no model).
 
-Three details come from real failures on a plugin UI project:
-
-- **A port is not an identity.** `start` records the pid that actually listens; `stop` kills only that pid and refuses a stranger on the port. Killing "whatever holds the port" once took the user's desktop app down with it.
-- **`http` carries the session token** parsed from the sandbox's own log, so route contracts (401 / 400 / 404 / 405) can be checked without hunting a token out of a page URL. The token is replaced with `{{token}}` in the returned body.
-- **`seed` copies data in, read-only on the source.** An isolated home is empty, so every panel shows an empty state and the interesting rendering is never exercised; seeding `myteam` (or a skills or data directory) from the real `~/.dsh` gives the sandbox real content to render. `.credentials.yaml` can be copied too, and the result says so — borrowed credentials are not verified credentials.
-
-**Model credentials stay with the user.** A sandbox starts with only a browser-session record in `.credentials.yaml`; the page then says "choose a model" and nothing sends. `open` prints the two lines the user runs in their own terminal, and they add the model once in Settings → Models. It lands in that sandbox's home and every later `open` reuses it — no script copies the user's credentials around. `list` reports `model: yes / no` by reading the record names, because the file is never empty in this DSH version (~160 bytes of skeleton even with no model).
-
-## Install
-
-This bundle is itself a development checkout, so it follows its own rule: install it into a sandbox first (`node scripts/sandbox.mjs create default --plugin .`), and install it into the profile you work in only when you have decided to — see the guard below.
+Commands, actions, and flags for all of this: [docs/TOOLS.md](docs/TOOLS.md).
 
 ## A plugin under development never lands in the current environment
 
-Creator mode registers a `ctx.tools.guard()` that refuses a local bundle install:
-
-- `plugin_manager` with `action: install_bundle` and a directory, `link:`, or `file:` target;
-- `pwsh`, `bash`, or `terminal` running `dsh plugin … add` with a local path or `link:`.
-
-It allows three cases on purpose: a registry spec (`name@version`) — publishing is the sanctioned way to ship; a host that **is** a sandbox (its `DSH_HOME` sits under a folder carrying `sandbox.json`, or under `tmp/sandboxes/`), where installing is the whole point; and an explicit user decision, expressed as `DSH_ALLOW_LOCAL_PLUGIN_INSTALL=1` on the host before a restart.
+Installing a local bundle is refused — whether through Plugin Manager or through a shell `dsh plugin … add` with a path or `link:` — with three deliberate exceptions: a registry spec (`name@version`), because publishing is the sanctioned way to ship; a host that **is** a sandbox (its `DSH_HOME` sits under a folder carrying `sandbox.json`, or under `tmp/sandboxes/`), where installing is the whole point; and an explicit user decision, expressed as `DSH_ALLOW_LOCAL_PLUGIN_INSTALL=1` on the host before a restart.
 
 The reasoning is asymmetric risk: a broken patch in a sandbox costs one restart, and the same patch in the profile the user actually works in means a host that boots with a broken composition. A guard, rather than a rule in a skill, because a rule is advice the model may skip under pressure.
 
-Limits, stated plainly: it does not cover a human typing `dsh plugin add` in their own terminal, and it is not a security boundary — it is an accident brake. `scripts/try-tool.mjs` runs 13 guard cases (deny, allow, sandbox host, override) so a change to the matcher is caught.
+Limits, stated plainly: it does not cover a human typing `dsh plugin add` in their own terminal, and it is not a security boundary — it is an accident brake. The exact matcher is in [docs/TOOLS.md](docs/TOOLS.md).
 
 ## How "Creator mode only" is implemented
 
@@ -164,7 +135,7 @@ A second consequence worth knowing: if a user later edits Creator mode in the We
 package.json          bundle manifest: exports, files, dsh.bundle.patch
 cordis.patch.yml      the patch layer: Host row + Creator-mode preset override
 index.js              Host half (registers nothing yet; future shared services)
-tools/index.js        preset-scoped half: dsh_plugin_check, dsh_plugin_new
+tools/index.js        preset-scoped half: the three tools and the install guard
 lib/bundle-check.js   the structural checker (shared by both tools)
 lib/generate.js       the generic template engine (recipe → files → rules)
 lib/rules.js          declarative structure checks
@@ -173,12 +144,14 @@ lib/sandbox.js        the sandbox engine (shared by the tool and the CLI)
 templates/bundle/     the bundle scheme: recipe.json, one template per variant
 skills/               skills mounted into Creator mode
 locale/{en,zh}.json   Plugin Manager title / description / detail path
-docs/                 detail document, feature image, and PHILOSOPHY.md
+docs/                 design docs (philosophy, schemes, tools) + detail page
 icon.svg              plugin icon
-scripts/              new-bundle CLI, sandbox register, patch/skill/tool checks
+scripts/              CLIs and the regression checks
 ```
 
 ## Install
+
+This bundle is itself a development checkout, so it follows its own rule: install it into a sandbox first, and install it into the profile you work in only when you have decided to — see the guard above.
 
 From this checkout, with Plugin Manager (preferred — it also handles bundle selection):
 
@@ -197,9 +170,9 @@ A local directory install links the checkout, so edits under `tools/` and `skill
 ## Verify
 
 1. `dsh --profile desktop --dump-config` shows the `powerful-host` row and a `preset-cordis` whose plugin list ends with `powerful-tools` and `powerful-skills`.
-2. A **new** Creator-mode session lists `dsh_plugin_check` among its tools and `dsh-plugin-isolated-test` in its skill catalog.
-3. A new Standard-mode session lists neither.
-4. `dsh_plugin_check` run against this repository reports `ok: true`.
+2. A **new** Creator-mode session lists the three added tools and both plugin-development skills.
+3. A new Standard-mode session lists none of them.
+4. The structural check run against this repository reports `ok: true`.
 
 Existing sessions keep the composition they started with; presets are resolved when a session is created.
 
