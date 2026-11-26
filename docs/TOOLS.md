@@ -10,6 +10,7 @@ README 讲能力，这个文件讲**具体是哪个工具、什么参数、边�
 | 检查一个包为什么装不上 / 显示不出来 | `dsh_plugin_check` | `scripts/try-tool.mjs`（只测自身） |
 | 拦住开发中插件的本地安装 | 安装守卫（不是工具，见下） | — |
 | 沙盒测试（建 / 起 / 探 / 停 / 清） | `dsh_sandbox` + 技能 `dsh-plugin-sandbox`（负责判断） | `scripts/sandbox.mjs` |
+| 发版（就绪检查 / 打包 / 沙盒演练） | `dsh_plugin_release` | `scripts/release.mjs` |
 | 按方案生成任意结构化内容 | `dsh_plugin_new` 的 `recipe` 参数 | `scripts/new-bundle.mjs --recipe` |
 | 结构规范检查（方案自带规则） | `dsh_plugin_check` 的规则段 + `lib/rules.js` | `scripts/try-generate.mjs` |
 
@@ -72,8 +73,21 @@ README 讲能力，这个文件讲**具体是哪个工具、什么参数、边�
 
 `project` 默认取会话工作目录。`start` 与 `open` 的区别只是「谁按下去」；两种方式加模型都由用户做一次。
 
-## 守卫（不是工具）
+### `dsh_plugin_release`
 
+发版就绪检查、打包、沙盒演练。**不发布**（不跑 `npm publish`）。
+
+| `action` | 参数 | 作用 |
+|---|---|---|
+| `check` | `path`、`dshVersion?` | 问打包器真实会装进 tarball 的文件（`pnpm pack --dry-run --json`，退 `npm`，再退按 `files` 近似并标注），并拿 `dsh --version` 与 `engines.dsh`（没有就看 `@deepseek-ai/dsh` 依赖）比对 |
+| `pack` | `path`、`outDir?` | 写 tarball，默认 `tmp/release/` |
+| `rehearse` | `path`、`sandbox?`（默认 `rollback`）、`project?` | 建/复用沙盒 → 打包 → 把 **tarball** 装进沙盒 profile → `--dump-config` 读回，返回回滚命令 |
+
+检查项：`release:manifest` / `name` / `description` / `version` / `entry` / `patch` / `private`（warn）/ `compatibility` / `surface` / `size`（warn）/ `contents`。
+
+**边界**：不发布、不验 registry 权限、semver 只支持 `^` `~` `>=` `<=` `>` `<` `=` `||`（不处理 `*` / `x` / 范围）、不验客户端渲染。步骤与判据见 [`RELEASE.md`](RELEASE.md)。
+
+## 守卫（不是工具）
 `ctx.tools.guard()`，在调用**执行前**拒绝，不占用任何工具位。拒绝这两种：
 
 | 触发 | 条件 |
@@ -96,8 +110,9 @@ README 讲能力，这个文件讲**具体是哪个工具、什么参数、边�
 
 | 脚本 | 覆盖 |
 |---|---|
-| `scripts/try-tool.mjs` | 三个工具挂载 + 生成一个包并自检 + 13 个守卫用例 |
+| `scripts/try-tool.mjs` | 四个工具挂载 + 生成一个包并自检 + 13 个守卫用例 |
 | `scripts/try-generate.mjs` | 通用引擎与规则引擎（40 项）+ 两种 bundle 变体 |
 | `scripts/try-sandbox.mjs` | 沙盒引擎（45 项，假启动器，不开真宿主） |
+| `scripts/try-release.mjs` | 发版检查（30 项：semver 子集、就绪检查、真实包面） |
 | `scripts/check-patch.mjs` | `cordis.patch.yml` 与出货预设的漂移 |
 | `scripts/check-skills.mjs` | 技能 frontmatter（需 DSH 运行时的 YAML 库） |

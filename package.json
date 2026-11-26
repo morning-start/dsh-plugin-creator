@@ -14,10 +14,12 @@
   "scripts": {
     "new": "node scripts/new-bundle.mjs",
     "sandbox": "node scripts/sandbox.mjs",
+    "release": "node scripts/release.mjs",
     "check:patch": "node scripts/check-patch.mjs .",
     "check:skills": "node scripts/check-skills.mjs",
     "check:generate": "node scripts/try-generate.mjs",
     "check:sandbox": "node scripts/try-sandbox.mjs",
+    "check:release": "node scripts/try-release.mjs",
     "check:tool": "node scripts/try-tool.mjs ."
   },
   "files": [

@@ -19,6 +19,7 @@ import { isAbsolute, join, resolve } from 'node:path'
 import { inspectBundle } from '../lib/bundle-check.js'
 import { scaffold } from '../lib/scaffold.js'
 import { Sandboxes } from '../lib/sandbox.js'
+import { inspectRelease, packRelease, rehearseRelease } from '../lib/release.js'
 
 export const name = 'powerful-tools'
 export const inject = ['tools']
@@ -31,6 +32,7 @@ export function apply(ctx) {
   ctx.effect(() => ctx.tools.register(pluginCheck), 'dsh-plugin-powerful/dsh_plugin_check')
   ctx.effect(() => ctx.tools.register(pluginNew(() => sessionDirectory(ctx))), 'dsh-plugin-powerful/dsh_plugin_new')
   ctx.effect(() => ctx.tools.register(sandboxTool(() => sessionDirectory(ctx))), 'dsh-plugin-powerful/dsh_sandbox')
+  ctx.effect(() => ctx.tools.register(releaseTool), 'dsh-plugin-powerful/dsh_plugin_release')
   ctx.effect(() => ctx.tools.guard(localInstallGuard), 'dsh-plugin-powerful/no-local-install')
 }
 
@@ -308,6 +310,89 @@ function pluginNew(defaultDirectory) {
       }
     },
   }
+}
+
+/**
+ * Release readiness: what is in the tarball, will DSH accept it, and does it
+ * install and activate in a sandbox.
+ *
+ * Publishing is not an action here on purpose — `npm publish` is irreversible and
+ * the account decision belongs to the user. The tool reports what to run.
+ */
+const releaseTool = {
+  name: 'dsh_plugin_release',
+  description:
+    'Prepare a plugin package for release. `check` reports what the packer would ship, whether the running DSH satisfies the package\'s engines/peer requirement, and what blocks a registry publish. `pack` writes the tarball. `rehearse` packs, installs it into a sandbox, and reads the composed config back — the only check that proves it installs and activates, plus the rollback command. It never publishes.',
+  parameters: {
+    type: 'object',
+    properties: {
+      action: {
+        type: 'string',
+        enum: ['check', 'pack', 'rehearse'],
+        description: 'check readiness; pack the tarball; or rehearse installing it in a sandbox.',
+      },
+      path: { type: 'string', description: 'The package directory (the folder holding package.json). Absolute.' },
+      outDir: { type: 'string', description: 'For pack: where to write the tarball. Defaults to <path>/tmp/release.' },
+      sandbox: { type: 'string', description: 'For rehearse: sandbox name to install into. Defaults to "rollback".' },
+      dshVersion: { type: 'string', description: 'For check: the DSH version to test compatibility against. Defaults to `dsh --version`.' },
+      project: { type: 'string', description: 'For rehearse: project root holding tmp/sandboxes. Defaults to the package directory.' },
+    },
+    required: ['action', 'path'],
+  },
+  output: {
+    schema: {
+      type: 'object',
+      properties: {
+        action: { type: 'string' },
+        ok: { type: 'boolean' },
+        summary: { type: 'string' },
+        data: { type: 'object', additionalProperties: true },
+      },
+      required: ['action', 'ok', 'summary', 'data'],
+    },
+    render: (_args, value) => [{ type: 'text', text: value.summary }],
+  },
+  async execute(args) {
+    const action = String(args.action)
+    const path = resolve(String(args.path))
+
+    if (action === 'check') {
+      const report = await inspectRelease(path, {
+        dshVersion: args.dshVersion === undefined ? undefined : String(args.dshVersion),
+      })
+      const lines = [`${report.target}: ${report.summary.fail} fail, ${report.summary.warn} warn, ${report.summary.pass} pass`]
+      for (const check of report.checks) {
+        if (check.status === 'pass') continue
+        lines.push(`${check.status.toUpperCase()} ${check.id}: ${check.message}`)
+      }
+      if (report.summary.fail === 0) {
+        lines.push(report.package.name === undefined
+          ? 'No blocking problem found.'
+          : `${report.package.name}@${report.package.version} has no blocking problem; next: action "pack", then "rehearse".`)
+      }
+      return { action, ok: report.ok, summary: lines.join('\n'), data: report }
+    }
+
+    if (action === 'pack') {
+      const outDir = args.outDir === undefined ? join(path, 'tmp', 'release') : resolve(String(args.outDir))
+      const packed = packRelease(path, outDir)
+      return { action, ok: true, summary: `Packed ${packed.tarball}\nvia: ${packed.command}`, data: packed }
+    }
+
+    if (action === 'rehearse') {
+      const result = await rehearseRelease(path, {
+        project: args.project === undefined ? undefined : String(args.project),
+        sandbox: args.sandbox === undefined ? undefined : String(args.sandbox),
+      })
+      const lines = [`Rehearsal in sandbox "${result.sandbox}": ${result.ok ? 'installed and composed' : 'FAILED'}`]
+      for (const step of result.steps) lines.push(`  ${step.step}: ${step.detail}`)
+      lines.push(`  rollback: ${result.rollback}`)
+      lines.push(`  publish:  ${result.publish}`)
+      return { action, ok: result.ok, summary: lines.join('\n'), data: result }
+    }
+
+    throw new Error(`unknown action "${action}"`)
+  },
 }
 
 /**

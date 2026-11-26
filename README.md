@@ -6,7 +6,7 @@ A plugin-development toolkit for DeepSeek Harness (DSH). Installing it extends *
 
 An agent-era scaffolding toolkit for DSH plugins. A plugin's life runs **构思 → 项目启动 → 规范化开发与检查 → 功能测试 → 集成测试 → 发版**; this package makes the mechanical parts of that cycle stable and fast, and leaves the judgment to skills and conversation.
 
-Where it stands today, stated plainly: **project start** and **functional testing** are in place; **normalized checks**, **integration testing**, and **release** are half-built. The gap list is deliberate — it is the roadmap.
+Where it stands today, stated plainly: **project start**, **functional testing**, and **release checks** are in place; **normalized checks** and **integration testing** are half-built. The gap list is deliberate — it is the roadmap.
 
 The first design rule: **Creator mode's own tools are this plugin's foundation.** Before adding anything, read what the preset already ships (`dsh --profile <p> --dump-config`, `cordis_inspect_*`) instead of re-implementing it. Installing and enabling is `plugin_manager`'s job; runtime truth comes from Inspect, not from reading source; anything that is judgment belongs in a skill. The full statement — the six-stage capability table with its gaps, the 32 shipped plugins grouped by what each means for the design, and the four design principles — is in [docs/PHILOSOPHY.md](docs/PHILOSOPHY.md) (Chinese).
 
@@ -23,6 +23,8 @@ Capabilities, not a feature list. Which tool implements which capability — wit
 **Test a plugin in a sandbox instead of the desktop app.** A project can hold several isolated instances — daily iteration, a clean reproduction, client UI states, a rollback rehearsal — each with its own home, profile, port, and workspace copy. They are reused rather than rebuilt, they carry a marker so one project's sandbox cannot be adopted by another, and they can be launched, probed over HTTP, seeded with real data, and stopped without touching anything the user is running.
 
 **Generate any structured content from a template.** The plugin scaffold is one instance of a general capability: a scheme is data (variables, file mapping, conditions, rules) plus templates, so a new scheme is a directory rather than a new generator. See [docs/SCHEMES.md](docs/SCHEMES.md).
+
+**Ship a release you have already installed once.** A readiness check asks the packer what would actually ship — not what `files` claims — and compares the package's `engines.dsh` with the running DSH, so a version mismatch is caught before installation rather than during it. A rehearsal then packs the tarball, installs it into a sandbox, and reads the composed config back, handing you the rollback command in the same breath. Publishing stays a human decision: the tool reports whether it would be safe and what to run. See [docs/RELEASE.md](docs/RELEASE.md).
 
 **Judgment where it belongs.** Two skills carry what a tool cannot: which questions to ask before generating a plugin, and how to test one without producing fake evidence.
 
@@ -223,7 +225,8 @@ Ordered by the lifecycle gaps in [docs/PHILOSOPHY.md](docs/PHILOSOPHY.md) §1 �
 
 **发版**
 
-- A release checker: `files` whitelist, `npm pack --dry-run` surface, version consistency, prepack output, and a rollback rehearsal in the `rollback` sandbox.
+- Done: readiness checks against the real packer surface and `engines.dsh`, plus a sandbox rehearsal that installs the tarball and reads the composed config back.
+- Next: emit `engines.dsh` from the template (the running version is known at generation time), so an incompatible install is refused by DSH before activation instead of after.
 
 **基础设施**
 

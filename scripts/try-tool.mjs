@@ -37,7 +37,7 @@ const ctx = {
 
 apply(ctx)
 const names = [...registered.keys()].sort()
-if (names.length !== 3) throw new Error(`expected 3 tools, got ${names.join(', ') || 'none'}`)
+if (names.length !== 4) throw new Error(`expected 4 tools, got ${names.join(', ') || 'none'}`)
 if (guards.length !== 1) throw new Error(`expected 1 guard, got ${guards.length}`)
 console.log(`registered: ${names.join(', ')} (+1 guard)\n`)
 
@@ -73,6 +73,16 @@ try {
   if (!/no sandbox/.test(error.message)) throw error
 }
 if (sandboxUnknown !== 'threw') throw new Error(`dsh_sandbox remove on an unknown sandbox: ${sandboxUnknown}`)
+
+// The release tool shares lib/release.js with the CLI; try-release.mjs covers the
+// engine, this only proves the tool is wired to it.
+const release = registered.get('dsh_plugin_release')
+const releaseReport = await release.execute({ action: 'check', path: repo }, {})
+if (typeof releaseReport.summary !== 'string' || !releaseReport.summary.includes('pass')) {
+  throw new Error(`dsh_plugin_release check said: ${releaseReport.summary}`)
+}
+if (releaseReport.data?.checks?.length === 0) throw new Error('dsh_plugin_release returned no checks')
+console.log(`dsh_plugin_release: ${releaseReport.data.summary.pass} pass, ${releaseReport.data.summary.warn} warn, ${releaseReport.data.summary.fail} fail`)
 console.log(`dsh_sandbox: ${sandboxEmpty.summary.split('\n')[0]}`)
 
 // --- install guard ---------------------------------------------------------
