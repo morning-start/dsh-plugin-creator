@@ -64,6 +64,15 @@ try {
   const again = await ensureChrome({ port })
   check('a second call reuses it', again.started === false)
 
+  // Two browsers must be able to coexist: a shared --user-data-dir silently stops
+  // the second one from exposing its own CDP port.
+  const otherPort = port + 1
+  const secondBrowser = await ensureChrome({ port: otherPort })
+  const secondAlive = await fetch(`http://127.0.0.1:${otherPort}/json/version`).then(response => response.status).catch(() => 0)
+  check('a second port gets its own browser', secondBrowser.started === true && secondAlive === 200, `${secondBrowser.started} / ${secondAlive}`)
+  check('the profiles differ', secondBrowser.profile !== again.profile, `${secondBrowser.profile} vs ${again.profile}`)
+  stopChrome(otherPort)
+
   console.log('\npage and assertions')
   page = await openPage(`${base}/`, { port, size: '1280x800' })
   check('the page opened', typeof page.target?.id === 'string')
