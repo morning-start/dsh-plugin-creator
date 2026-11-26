@@ -1,0 +1,12 @@
+# Dependencies
+node_modules/
+
+# Local scratch: isolated test homes, debug captures, logs
+tmp/
+.debug/
+*.log
+
+# OS noise
+.DS_Store
+Thumbs.db
+desktop.ini

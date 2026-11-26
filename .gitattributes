@@ -1,0 +1,9 @@
+# Normalize line endings: LF in the repository and in the working tree.
+# The bundle patch is compared against a shipped file, so stable line endings
+# keep that comparison meaningful.
+* text=auto eol=lf
+
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.webp binary

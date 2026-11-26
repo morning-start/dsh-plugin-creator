@@ -1,0 +1,7 @@
+{
+  "meta": {
+    "title": "Plugin development toolkit",
+    "description": "Adds plugin-development help to Creator mode only. Creator mode gains the dsh_plugin_check tool, which reports the structural problems that stop a bundle from installing or displaying, and the dsh-plugin-isolated-test skill, which describes how to test a plugin in a dsh web instance with its own DSH_HOME, profile, and port. Other presets gain nothing. Removing the bundle removes the tool and the skill with it; the Creator-mode preset falls back to the shipped declaration. The tool is read-only and needs an absolute bundle directory; it does not parse the patch file as YAML, so it cannot catch YAML syntax errors.",
+    "detail": "docs/DETAIL.md"
+  }
+}
