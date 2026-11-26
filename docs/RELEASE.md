@@ -76,6 +76,32 @@ node scripts/release.mjs market --write data/plugins/<owner>__<repo>.yml # 市�
 
 `private: true` 会直接挡住 `publish`，这是有意的：本地 bundle 分发不需要 registry。
 
+## 4.5 打一个 tag 就发版（GitHub Actions）
+
+上面那几条命令可以串进 CI。本仓库和**每个生成的插件包**都带一份 `.github/workflows/release.yml`，触发条件是 `push` 到 `v*` 标签：
+
+```powershell
+git tag v0.1.0
+git push origin v0.1.0
+```
+
+工作流做五件事，任何一步失败就不发：
+
+| 步骤 | 判据 |
+|---|---|
+| 标签与版本一致 | `v1.2.0` 必须对应 `package.json` 的 `1.2.0`——防止打了 tag 忘了改版本 |
+| 包是可安装的 | 有 `dsh.bundle.patch`；本仓库额外跑 `release check` 和七套回归 |
+| 打包 | `npm pack`，然后复制成**不带版本号**的资产名 |
+| 发 registry（可选） | 配了 `NPM_TOKEN` 且 `private !== true` 才发，发完跑 `verify` |
+| 建 GitHub Release | `gh release create <tag> <asset> --generate-notes` |
+
+两个刻意的设计：
+
+- **资产名不带版本号**（`<name>.tgz`）。市场的 `tarball:` 常写 `releases/latest/download/<name>.tgz`，那里 tag 在请求时解析、文件名照字面取——带版本号下次发版就 404。
+- **`private: true` 时跳过 registry 步骤**而不是报错。本地 bundle 用 GitHub Release 分发就够了，不该因为没配 npm 就发不出去。
+
+`NPM_TOKEN` 放在仓库的 Actions secrets 里；没有它工作流照样跑，只是不发 npm。
+
 ## 5. 装到真实 profile
 
 ```powershell

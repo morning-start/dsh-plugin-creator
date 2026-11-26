@@ -5,7 +5,9 @@
     {
       "id": "docs:links",
       "type": "doc-links",
-      "exclude": ["\\.dsh-memory/"]
+      "exclude": [
+        "\\.dsh-memory/"
+      ]
     },
     {
       "id": "bundle:entry",
@@ -23,7 +25,12 @@
       "id": "bundle:files-listed",
       "type": "files-listed",
       "manifest": "package.json",
-      "exclude": [".gitignore", ".gitattributes", "checks.json"]
+      "exclude": [
+        ".gitignore",
+        ".gitattributes",
+        "checks.json",
+        ".github/workflows/release.yml"
+      ]
     }
   ]
 }

@@ -168,6 +168,11 @@
       "to": "checks.json",
       "when": "hasZh",
       "package": false
+    },
+    {
+      "from": "github-release.yml.tpl",
+      "to": ".github/workflows/release.yml",
+      "package": false
     }
   ],
   "rules": [
@@ -209,6 +214,15 @@
       "path": "skills/{{skillName}}/SKILL.md",
       "equals": "{{skillName}}",
       "when": "withSkill"
+    },
+    {
+      "id": "recipe:release-workflow",
+      "type": "file-contains",
+      "path": ".github/workflows/release.yml",
+      "contains": [
+        "tags: ['v*']",
+        "gh release create"
+      ]
     }
   ],
   "warnings": {

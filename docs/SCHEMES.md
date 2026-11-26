@@ -82,6 +82,9 @@ lib/scaffold.js        该方案的「计算部分」：derive 函数 + 深检�
 | `{{name}}` | 原样替换 |
 | `{{name\|json}}` | `JSON.stringify` 之后替换——**JSON 里的用户输入必须走这个**，否则一个引号就把清单弄坏了 |
 | `{{name}}` 在 `to` 里 | 文件名也能带变量（`skills/{{skillName}}/SKILL.md`） |
+| `\{{` | 转义：渲染成字面 `{{`，不当占位符 |
+
+转义是为 GitHub Actions 准备的：workflow 里到处是 `${{ secrets.X }}`，模板若不转义就会被当成占位符。写 `$\{{ github.ref }}`，产出 `${{ github.ref }}`。
 
 渲染完还剩下任何 `{{...}}` → **直接报错**。模板和 recipe 对不上时，宁可失败也不产出半成品。
 

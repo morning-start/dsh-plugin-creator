@@ -155,8 +155,8 @@ try {
 
   console.log('\nthe bundle scheme')
   for (const [label, values, expected] of [
-    ['tool only', { packageName: 'dsh-plugin-a', title: 'A', description: 'A test plugin for the engine.' }, ['index.js', 'tools/example.js', 'cordis.patch.yml', 'locale/en.json', 'package.json', 'README.md', 'icon.svg', '.gitignore', '.gitattributes', 'checks.json']],
-    ['no tool, with skill', { packageName: '@scope/b', title: 'B', description: 'Another test plugin here.', withTool: false, withSkill: true, titleZh: '乙' }, ['index.js', 'skills/b/SKILL.md', 'cordis.patch.yml', 'locale/en.json', 'locale/zh.json', 'package.json', 'checks.json']],
+    ['tool only', { packageName: 'dsh-plugin-a', title: 'A', description: 'A test plugin for the engine.' }, ['index.js', 'tools/example.js', 'cordis.patch.yml', 'locale/en.json', 'package.json', 'README.md', 'icon.svg', '.gitignore', '.gitattributes', 'checks.json', '.github/workflows/release.yml']],
+    ['no tool, with skill', { packageName: '@scope/b', title: 'B', description: 'Another test plugin here.', withTool: false, withSkill: true, titleZh: '乙' }, ['index.js', 'skills/b/SKILL.md', 'cordis.patch.yml', 'locale/en.json', 'locale/zh.json', 'package.json', 'checks.json', '.github/workflows/release.yml']],
   ]) {
     const dest = join(work, label.replace(/[^a-z]+/g, '-'))
     const result = await scaffold({ ...values, dest })

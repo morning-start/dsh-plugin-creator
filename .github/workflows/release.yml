@@ -1,0 +1,82 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    env:
+      NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: The tag must match package.json
+        run: |
+          version=$(node -p "require('./package.json').version")
+          tag="${GITHUB_REF_NAME#v}"
+          if [ "$version" != "$tag" ]; then
+            echo "::error::tag $GITHUB_REF_NAME does not match package.json version $version"
+            exit 1
+          fi
+          echo "releasing $version"
+
+      - name: The package must be releasable
+        run: |
+          node -e "const m=require('./package.json'); if(!m.dsh?.bundle?.patch) { console.error('no dsh.bundle.patch: not installable'); process.exit(1) }"
+          node scripts/release.mjs check .
+
+      - name: Suites that need no Host
+        run: |
+          node scripts/try-tool.mjs .
+          node scripts/try-sandbox.mjs
+          node scripts/try-checks.mjs
+          node scripts/try-audit.mjs
+          node scripts/try-generate.mjs
+          node scripts/try-release.mjs
+          node scripts/try-market.mjs
+          node scripts/check-project.mjs .
+
+      - name: Pack
+        run: |
+          node scripts/release.mjs pack .
+          # The marketplace points at releases/latest/download/<name>.tgz, where the
+          # tag resolves at request time but the filename is literal. A version in
+          # the asset name would 404 at the next release.
+          asset=$(node -p "require('./package.json').name.replace(/^@[^/]+\//, '')")
+          mkdir -p dist
+          cp tmp/release/*.tgz "dist/$asset.tgz"
+          echo "ASSET=dist/$asset.tgz" >> "$GITHUB_ENV"
+
+      - name: Publish to the registry
+        if: env.NPM_TOKEN != ''
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          if node -e "process.exit(require('./package.json').private === true ? 0 : 1)"; then
+            echo "package.json is private: skipping npm publish"
+            exit 0
+          fi
+          npm publish --access public
+          node scripts/release.mjs verify . --version "${GITHUB_REF_NAME#v}"
+
+      - name: Create the GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" "$ASSET" \
+            --title "$GITHUB_REF_NAME" \
+            --generate-notes
