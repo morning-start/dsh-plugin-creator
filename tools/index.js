@@ -20,6 +20,7 @@ import { inspectBundle } from '../lib/bundle-check.js'
 import { scaffold } from '../lib/scaffold.js'
 import { Sandboxes } from '../lib/sandbox.js'
 import { inspectRelease, packRelease, rehearseRelease } from '../lib/release.js'
+import { openPage, runAssertions, stopChrome } from '../lib/ui.js'
 
 export const name = 'powerful-tools'
 export const inject = ['tools']
@@ -33,6 +34,7 @@ export function apply(ctx) {
   ctx.effect(() => ctx.tools.register(pluginNew(() => sessionDirectory(ctx))), 'dsh-plugin-powerful/dsh_plugin_new')
   ctx.effect(() => ctx.tools.register(sandboxTool(() => sessionDirectory(ctx))), 'dsh-plugin-powerful/dsh_sandbox')
   ctx.effect(() => ctx.tools.register(releaseTool), 'dsh-plugin-powerful/dsh_plugin_release')
+  ctx.effect(() => ctx.tools.register(uiTool(() => sessionDirectory(ctx))), 'dsh-plugin-powerful/dsh_plugin_ui')
   ctx.effect(() => ctx.tools.guard(localInstallGuard), 'dsh-plugin-powerful/no-local-install')
 }
 
@@ -393,6 +395,148 @@ const releaseTool = {
 
     throw new Error(`unknown action "${action}"`)
   },
+}
+
+/**
+ * Drive a headless browser against a sandbox page: screenshot it, assert on it,
+ * or evaluate an expression in it.
+ *
+ * This is the integration-test half of the cycle. A sandbox supplies the URL and
+ * token; this supplies the eyes — real screenshots, real assertions, real clicks —
+ * so "the tab is there and shows data" stops depending on someone describing it.
+ * It is not a substitute for a human on look-and-feel: a screenshot proves what
+ * rendered, assertions prove what must be true.
+ */
+function uiTool(defaultDirectory) {
+  return {
+    name: 'dsh_plugin_ui',
+    description:
+      'Look at and assert on a running page through a headless browser (Chrome DevTools Protocol): `shot` saves a screenshot, `assert` checks selectors / text / expressions / console errors, `eval` returns a value from the page, `close` stops the browser. Point it at a sandbox (name + path) and it resolves the URL and session token for you, or give a URL directly. The browser is reused between calls; `close` is the way to stop it.',
+    parameters: {
+      type: 'object',
+      properties: {
+        action: {
+          type: 'string',
+          enum: ['shot', 'assert', 'eval', 'close'],
+          description: 'screenshot the page; run assertions; evaluate an expression; stop the browser.',
+        },
+        sandbox: { type: 'string', description: 'Sandbox name to take the URL from. Requires the sandbox to be running.' },
+        path: { type: 'string', description: 'For sandbox targets: the page path to open, e.g. "/" or "/settings". Defaults to "/".' },
+        url: { type: 'string', description: 'A full URL to open instead of a sandbox. If it has no token, one is added when a sandbox is named.' },
+        project: { type: 'string', description: 'Project root holding tmp/sandboxes. Defaults to the session working directory.' },
+        out: { type: 'string', description: 'For shot: where to write the PNG. Defaults to <project>/tmp/ui/<action>-<time>.png.' },
+        size: { type: 'string', description: 'Viewport, e.g. "1440x900" or "390x844" for a phone width.' },
+        assertions: {
+          type: 'array',
+          description: 'For assert: objects with one of selector / text / expression (+ equals) / noConsoleErrors / noNetworkFailures, and an optional id.',
+          items: { type: 'object', additionalProperties: true },
+        },
+        expression: { type: 'string', description: 'For eval: a JavaScript expression evaluated in the page.' },
+        click: { type: 'string', description: 'Click this selector before the action (real mouse events, not a synthetic click).' },
+        type: {
+          type: 'object',
+          description: 'Focus a selector and insert text, e.g. {"selector": "#input", "text": "hello"}.',
+          additionalProperties: true,
+        },
+        settleMs: { type: 'integer', description: 'How long to wait after load before acting. Defaults to 1200.' },
+        port: { type: 'integer', description: 'CDP port. Defaults to 9222; a second port lets two browsers coexist.' },
+      },
+      required: ['action'],
+    },
+    output: {
+      schema: {
+        type: 'object',
+        properties: {
+          action: { type: 'string' },
+          ok: { type: 'boolean' },
+          summary: { type: 'string' },
+          data: { type: 'object', additionalProperties: true },
+        },
+        required: ['action', 'ok', 'summary', 'data'],
+      },
+      render: (_args, value) => [{ type: 'text', text: value.summary }],
+    },
+    async execute(args, exec) {
+      const action = String(args.action)
+      if (action === 'close') {
+        const killed = stopChrome(args.port === undefined ? undefined : Number(args.port))
+        return { action, ok: true, summary: killed.length === 0 ? 'No browser was listening on the CDP port.' : `Stopped ${killed.length} browser process(es).`, data: { killed } }
+      }
+
+      const project = args.project === undefined ? defaultDirectory(exec) : resolve(String(args.project))
+      const url = targetUrl(args, project)
+      const options = {
+        port: args.port === undefined ? undefined : Number(args.port),
+        size: args.size === undefined ? undefined : String(args.size),
+        settleMs: args.settleMs === undefined ? undefined : Number(args.settleMs),
+      }
+
+      const page = await openPage(url, options)
+      try {
+        if (args.click !== undefined) await page.click(String(args.click))
+        if (args.type !== undefined) {
+          const input = args.type
+          if (typeof input.selector !== 'string' || typeof input.text !== 'string') {
+            throw new Error('type needs { selector, text }')
+          }
+          await page.type(input.selector, input.text)
+        }
+
+        if (action === 'eval') {
+          const value = await page.evaluate(String(args.expression ?? 'document.title'))
+          return { action, ok: true, summary: `${args.expression ?? 'document.title'} → ${JSON.stringify(value)}`, data: { value } }
+        }
+
+        if (action === 'assert') {
+          const assertions = Array.isArray(args.assertions) ? args.assertions : []
+          if (assertions.length === 0) throw new Error('assert needs at least one assertion')
+          const result = await runAssertions(page, assertions)
+          const lines = [`${result.summary.pass} pass, ${result.summary.fail} fail`]
+          for (const check of result.checks) {
+            if (check.status === 'pass') continue
+            lines.push(`FAIL ${check.id}: ${check.detail}`)
+          }
+          if (result.ok) lines.push('Every assertion passed.')
+          return { action, ok: result.ok, summary: lines.join('\n'), data: result }
+        }
+
+        if (action === 'shot') {
+          const out = args.out === undefined
+            ? join(project, 'tmp', 'ui', `shot-${Date.now()}.png`)
+            : resolve(String(args.out))
+          const path = await page.screenshot(out)
+          return { action, ok: true, summary: `Screenshot: ${path}`, data: { path, url } }
+        }
+
+        throw new Error(`unknown action "${action}"`)
+      } finally {
+        await page.close().catch(() => {})
+      }
+    },
+  }
+}
+
+/**
+ * The page to open: an explicit URL, or a sandbox's URL plus a path with its
+ * session token carried over. The token never leaves this function except inside
+ * the URL handed to the browser.
+ */
+function targetUrl(args, project) {
+  if (args.url !== undefined && args.sandbox === undefined) return String(args.url)
+  if (args.sandbox === undefined) throw new Error('give either url or sandbox')
+
+  if (project === undefined) throw new Error('project is required: this deployment exposes no working directory for the session')
+  const sandboxes = new Sandboxes(project)
+  const recorded = sandboxes.recordedUrl(String(args.sandbox))
+  if (recorded === undefined) {
+    throw new Error(`sandbox "${args.sandbox}" has no recorded URL; start it first (dsh_sandbox action "start")`)
+  }
+  const base = new URL(recorded)
+  const target = new URL(String(args.path ?? '/'), base.origin)
+  if (!target.searchParams.has('token') && base.searchParams.has('token')) {
+    target.searchParams.set('token', base.searchParams.get('token'))
+  }
+  return target.href
 }
 
 /**

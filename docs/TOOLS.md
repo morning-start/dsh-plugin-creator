@@ -10,6 +10,7 @@ README 讲能力，这个文件讲**具体是哪个工具、什么参数、边�
 | 检查一个包为什么装不上 / 显示不出来 | `dsh_plugin_check` | `scripts/try-tool.mjs`（只测自身） |
 | 拦住开发中插件的本地安装 | 安装守卫（不是工具，见下） | — |
 | 沙盒测试（建 / 起 / 探 / 停 / 清） | `dsh_sandbox` + 技能 `dsh-plugin-sandbox`（负责判断） | `scripts/sandbox.mjs` |
+| 看页面 / 断言 / 真实点击 | `dsh_plugin_ui` | `scripts/ui.mjs` |
 | 发版（就绪检查 / 打包 / 沙盒演练） | `dsh_plugin_release` | `scripts/release.mjs` |
 | 按方案生成任意结构化内容 | `dsh_plugin_new` 的 `recipe` 参数 | `scripts/new-bundle.mjs --recipe` |
 | 结构规范检查（方案自带规则） | `dsh_plugin_check` 的规则段 + `lib/rules.js` | `scripts/try-generate.mjs` |
@@ -73,6 +74,23 @@ README 讲能力，这个文件讲**具体是哪个工具、什么参数、边�
 
 `project` 默认取会话工作目录。`start` 与 `open` 的区别只是「谁按下去」；两种方式加模型都由用户做一次。
 
+### `dsh_plugin_ui`
+
+用无头浏览器（CDP）看真页面。**截图证明渲染，断言证明对错**，两者都不能代替人看观感。
+
+| `action` | 参数 | 作用 |
+|---|---|---|
+| `shot` | `sandbox`+`path` 或 `url`、`out?`、`size?` | 截图存 PNG，返回路径 |
+| `assert` | 同上 + `assertions[]` | 逐条断言：`selector` / `text` / `expression`(+`equals`) / `noConsoleErrors` / `noNetworkFailures` |
+| `eval` | 同上 + `expression` | 在页面里求值并返回 |
+| `close` | `port?` | 停掉浏览器 |
+
+共同参数：`click`（先真实点击某选择器）、`type`（`{selector, text}`，走 `Input.insertText`）、`settleMs`、`port`（默认 9222）。
+
+**token**：给 `sandbox` 时从沙盒日志取 URL 与 `?token=`，正文里的 token 替换成 `{{token}}`。
+
+**边界**：需要本机 Chrome/Edge（`CHROME_PATH` 可指定）；不覆盖多窗口、拖拽、输入法；视觉判断仍是人；`element.click()` 那类合成事件不算点击。步骤与判据见 [`UI.md`](UI.md)。
+
 ### `dsh_plugin_release`
 
 发版就绪检查、打包、沙盒演练。**不发布**（不跑 `npm publish`）。
@@ -110,9 +128,10 @@ README 讲能力，这个文件讲**具体是哪个工具、什么参数、边�
 
 | 脚本 | 覆盖 |
 |---|---|
-| `scripts/try-tool.mjs` | 四个工具挂载 + 生成一个包并自检 + 13 个守卫用例 |
+| `scripts/try-tool.mjs` | 五个工具挂载 + 生成一个包并自检 + 13 个守卫用例 |
 | `scripts/try-generate.mjs` | 通用引擎与规则引擎（40 项）+ 两种 bundle 变体 |
 | `scripts/try-sandbox.mjs` | 沙盒引擎（45 项，假启动器，不开真宿主） |
 | `scripts/try-release.mjs` | 发版检查（30 项：semver 子集、就绪检查、真实包面） |
+| `scripts/try-ui.mjs` | 真浏览器：断言、真实点击/输入、截图 PNG、console error 捕获 |
 | `scripts/check-patch.mjs` | `cordis.patch.yml` 与出货预设的漂移 |
 | `scripts/check-skills.mjs` | 技能 frontmatter（需 DSH 运行时的 YAML 库） |

@@ -6,7 +6,7 @@ A plugin-development toolkit for DeepSeek Harness (DSH). Installing it extends *
 
 An agent-era scaffolding toolkit for DSH plugins. A plugin's life runs **构思 → 项目启动 → 规范化开发与检查 → 功能测试 → 集成测试 → 发版**; this package makes the mechanical parts of that cycle stable and fast, and leaves the judgment to skills and conversation.
 
-Where it stands today, stated plainly: **project start**, **functional testing**, and **release checks** are in place; **normalized checks** and **integration testing** are half-built. The gap list is deliberate — it is the roadmap.
+Where it stands today, stated plainly: **project start**, **functional testing**, **client UI checks**, and **release checks** are in place; **normalized checks** (lint, architecture, contracts, doc links) are half-built. The gap list is deliberate — it is the roadmap.
 
 The first design rule: **Creator mode's own tools are this plugin's foundation.** Before adding anything, read what the preset already ships (`dsh --profile <p> --dump-config`, `cordis_inspect_*`) instead of re-implementing it. Installing and enabling is `plugin_manager`'s job; runtime truth comes from Inspect, not from reading source; anything that is judgment belongs in a skill. The full statement — the six-stage capability table with its gaps, the 32 shipped plugins grouped by what each means for the design, and the four design principles — is in [docs/PHILOSOPHY.md](docs/PHILOSOPHY.md) (Chinese).
 
@@ -21,6 +21,8 @@ Capabilities, not a feature list. Which tool implements which capability — wit
 **Keep a plugin under development out of the environment you work in.** Installing from a local directory is refused, with three deliberate exceptions: a published version, a host that is itself a sandbox, or an explicit decision by the user. The risk is asymmetric — a broken patch in a sandbox costs one restart, the same patch in the working profile costs a host that boots broken — so this is a guard, not advice.
 
 **Test a plugin in a sandbox instead of the desktop app.** A project can hold several isolated instances — daily iteration, a clean reproduction, client UI states, a rollback rehearsal — each with its own home, profile, port, and workspace copy. They are reused rather than rebuilt, they carry a marker so one project's sandbox cannot be adopted by another, and they can be launched, probed over HTTP, seeded with real data, and stopped without touching anything the user is running.
+
+**See the page, and assert on it.** A headless browser is driven over the DevTools Protocol against the sandbox: real screenshots, assertions on selectors, text, expressions and console errors, and real clicks and typing — not a synthetic `element.click()`, which React inputs and contenteditable ignore. The session token is taken from the sandbox's own log, so no one has to hunt it out of a URL. A screenshot proves what rendered; assertions prove what must be true; neither replaces a human on look and feel. See [docs/UI.md](docs/UI.md).
 
 **Generate any structured content from a template.** The plugin scaffold is one instance of a general capability: a scheme is data (variables, file mapping, conditions, rules) plus templates, so a new scheme is a directory rather than a new generator. See [docs/SCHEMES.md](docs/SCHEMES.md).
 

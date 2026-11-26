@@ -20,6 +20,8 @@
     "check:generate": "node scripts/try-generate.mjs",
     "check:sandbox": "node scripts/try-sandbox.mjs",
     "check:release": "node scripts/try-release.mjs",
+    "ui": "node scripts/ui.mjs",
+    "check:ui": "node scripts/try-ui.mjs",
     "check:tool": "node scripts/try-tool.mjs ."
   },
   "files": [

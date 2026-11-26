@@ -37,7 +37,7 @@ const ctx = {
 
 apply(ctx)
 const names = [...registered.keys()].sort()
-if (names.length !== 4) throw new Error(`expected 4 tools, got ${names.join(', ') || 'none'}`)
+if (names.length !== 5) throw new Error(`expected 5 tools, got ${names.join(', ') || 'none'}`)
 if (guards.length !== 1) throw new Error(`expected 1 guard, got ${guards.length}`)
 console.log(`registered: ${names.join(', ')} (+1 guard)\n`)
 
@@ -83,6 +83,13 @@ if (typeof releaseReport.summary !== 'string' || !releaseReport.summary.includes
 }
 if (releaseReport.data?.checks?.length === 0) throw new Error('dsh_plugin_release returned no checks')
 console.log(`dsh_plugin_release: ${releaseReport.data.summary.pass} pass, ${releaseReport.data.summary.warn} warn, ${releaseReport.data.summary.fail} fail`)
+
+// The UI tool needs a browser and a page; try-ui.mjs drives it for real. Here we
+// only prove it is registered and that `close` is safe when nothing is running.
+const ui = registered.get('dsh_plugin_ui')
+const uiClose = await ui.execute({ action: 'close', port: 9334 }, {})
+if (typeof uiClose.summary !== 'string') throw new Error('dsh_plugin_ui close returned no summary')
+console.log(`dsh_plugin_ui: ${uiClose.summary}`)
 console.log(`dsh_sandbox: ${sandboxEmpty.summary.split('\n')[0]}`)
 
 // --- install guard ---------------------------------------------------------
