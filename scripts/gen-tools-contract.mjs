@@ -11,7 +11,8 @@
  * this generator to prove the committed copy is not stale.
  *
  * Mounting the plugin on a stub context is the same trick `try-tool.mjs` uses; it
- * is the only way to read tool definitions without a Host.
+ * is the only way to read tool definitions without a Host. `try-tool.mjs` does
+ * not read this contract — the drift check in checks.json is what guards it.
  */
 
 import { mkdirSync, writeFileSync } from 'node:fs'

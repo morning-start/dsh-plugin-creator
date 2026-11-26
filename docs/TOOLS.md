@@ -166,7 +166,7 @@ README 讲能力，这个文件讲**具体是哪个工具、什么参数、边�
 
 | 脚本 | 覆盖 |
 |---|---|
-| `scripts/try-tool.mjs` | 六个工具挂载 + 生成一个包并自检 + 13 个守卫用例 |
+| `scripts/try-tool.mjs` | 六个工具挂载 + 生成一个包并自检 + 守卫用例 11 条 + 沙盒宿主 2 条 |
 | `scripts/try-generate.mjs` | 通用引擎与规则引擎（40 项）+ 两种 bundle 变体 |
 | `scripts/try-sandbox.mjs` | 沙盒引擎（45 项，假启动器，不开真宿主） |
 | `scripts/try-release.mjs` | 发版检查（30 项：semver 子集、就绪检查、真实包面） |

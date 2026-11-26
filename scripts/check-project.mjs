@@ -6,7 +6,8 @@
  *   node scripts/check-project.mjs [dir] [--config <file>] [--only id,id] [--update]
  *
  * The project declares its rules in `checks.json`; this runs them and exits 1 on
- * any failure. --update regenerates contract files instead of only reporting\n * them. Rule types are documented in docs/CHECKS.md.
+ * any failure. --update regenerates contract files instead of only reporting
+ * them. Rule types are documented in docs/CHECKS.md.
  */
 
 import { resolve } from 'node:path'

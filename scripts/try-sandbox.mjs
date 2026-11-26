@@ -11,7 +11,7 @@ import { mkdirSync, readFileSync, rmSync, writeFileSync, existsSync } from 'node
 import { createServer } from 'node:http'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { Sandboxes, credentialKeys, resolveLauncher } from '../lib/sandbox.js'
+import { Sandboxes, credentialKeys, launcherHead, resolveLauncher } from '../lib/sandbox.js'
 
 const repo = fileURLToPath(new URL('..', import.meta.url))
 const project = join(repo, 'tmp', 'test-sandbox-project')
@@ -70,7 +70,9 @@ try {
   console.log('\ncreate')
   const first = await sandboxes.create('dev', { plugin: join(project, 'plugin') })
   created.push('dev')
-  check('port allocated from the range', first.port === 3100, `got ${first.port}`)
+  // The range starts at 3100, but a real sandbox may already hold it: assert the
+  // allocation came from the range rather than that it got the first port.
+  check('port allocated from the range', first.port >= 3100 && first.port < 3200, `got ${first.port}`)
   check('plugin installed', first.installed === true)
   check('home created', existsSync(join(project, 'tmp', 'sandboxes', 'dev', 'home')))
   check('workspace created', existsSync(join(project, 'tmp', 'sandboxes', 'dev', 'workspace')))
@@ -212,6 +214,31 @@ try {
   console.log('\nlauncher resolution')
   const launcher = resolveLauncher()
   check('resolves to an absolute path or the bare command', launcher === 'dsh' || launcher.length > 0, launcher)
+
+  // The desktop app derives a launcher under "DeepSeek Harness"; cmd.exe cuts an
+  // unquoted path at the first space, which broke every sandbox action there.
+  console.log('\nlauncher quoting')
+  check('a path with spaces is quoted', launcherHead('C:\\Program Files\\DeepSeek Harness\\dsh.cmd') === '"C:\\Program Files\\DeepSeek Harness\\dsh.cmd"')
+  check('a path without spaces is untouched', launcherHead('C:\\bin\\dsh.cmd') === 'C:\\bin\\dsh.cmd')
+  check('a bare command is untouched', launcherHead('dsh') === 'dsh')
+  const commandLineLauncher = `${process.execPath} "${fakeLauncher}"`
+  check('an existing command line is not quoted again', launcherHead(commandLineLauncher) === commandLineLauncher)
+
+  // End to end: a launcher that really lives under a directory with a space, so
+  // the quoting is exercised by cmd.exe rather than only by the string helper.
+  const spaced = join(project, 'space dir')
+  mkdirSync(spaced, { recursive: true })
+  const spacedLauncher = join(spaced, 'fake dsh.cmd')
+  writeFileSync(spacedLauncher, `@echo off\r\n"${process.execPath}" "${fakeLauncher}" %*\r\n`)
+  const spacedSandboxes = new Sandboxes(project, { launcher: spacedLauncher })
+  const spacedEntry = await spacedSandboxes.create('spaced', {})
+  const spacedName = spacedEntry.name ?? 'spaced'
+  created.push(spacedName)
+  const spacedStart = await spacedSandboxes.start(spacedName)
+  check('a launcher under a path with spaces starts', typeof spacedStart.url === 'string' && spacedStart.url.includes('token='), JSON.stringify(spacedStart).slice(0, 160))
+  spacedSandboxes.stop(spacedName)
+  spacedSandboxes.remove(spacedName, { confirmed: true })
+  created.splice(created.indexOf(spacedName), 1)
 } finally {
   for (const name of created) {
     try {

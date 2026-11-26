@@ -657,7 +657,7 @@ function sandboxTool(defaultDirectory) {
           description: 'For seed: entry names inside the source DSH_HOME to copy in, e.g. ["myteam"] or ["skills"]. The source is only read.',
         },
         from: { type: 'string', description: 'For seed: the DSH_HOME to copy from. Defaults to ~/.dsh.' },
-        force: { type: 'boolean', description: 'For seed: overwrite existing entries. For stop: kill a listener that is not the recorded process.' },
+        force: { type: 'boolean', description: 'For seed: overwrite existing entries. For stop: kill whatever listens on the sandbox port, including the desktop app or another instance — only after the user says so.' },
         confirm: { type: 'boolean', description: 'For remove: must be true. Removing deletes the model credentials added in that sandbox.' },
       },
       required: ['action'],

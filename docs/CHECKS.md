@@ -149,6 +149,8 @@ markdown 里的**相对链接**必须解析得到。跳过 `http(s)://`、`mailt
 { "rules": [
   { "id": "docs:links", "type": "doc-links", "exclude": ["\\.dsh-memory/", "^tmp/"] },
   { "id": "locale:parity", "type": "locale-parity", "files": ["locale/en.json", "locale/zh.json"] },
+  { "id": "contract:tools", "type": "contract-drift",
+    "file": "docs/contracts/tools.json", "generator": "node scripts/gen-tools-contract.mjs" },
   { "id": "bundle:entry", "type": "file-exists", "path": "index.js" },
   { "id": "bundle:patch", "type": "json-field", "path": "package.json", "field": "dsh.bundle.patch", "equals": "./cordis.patch.yml" }
 ] }

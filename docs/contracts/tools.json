@@ -540,7 +540,7 @@
           },
           "force": {
             "type": "boolean",
-            "description": "For seed: overwrite existing entries. For stop: kill a listener that is not the recorded process."
+            "description": "For seed: overwrite existing entries. For stop: kill whatever listens on the sandbox port, including the desktop app or another instance — only after the user says so."
           },
           "confirm": {
             "type": "boolean",

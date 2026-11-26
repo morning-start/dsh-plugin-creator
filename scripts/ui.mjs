@@ -12,7 +12,7 @@
  */
 
 import { join, resolve } from 'node:path'
-import { openPage, runAssertions, stopChrome } from '../lib/ui.js'
+import { openPage, redact, runAssertions, stopChrome } from '../lib/ui.js'
 import { Sandboxes } from '../lib/sandbox.js'
 
 function flag(name) {
@@ -98,7 +98,11 @@ async function main() {
     }
     if (command === 'eval') {
       const expression = flag('--expression') ?? 'document.title'
-      console.log(JSON.stringify(await page.evaluate(expression), null, 2))
+      const value = await page.evaluate(expression)
+      // The page may hand back its own URL, and that URL carries the session
+      // token: redact before printing, like every other path in this tool.
+      const text = redact(JSON.stringify(value, null, 2))
+      console.log(text)
       return
     }
     const assertions = assertionsFromFlags()
