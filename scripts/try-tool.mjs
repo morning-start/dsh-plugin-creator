@@ -37,7 +37,7 @@ const ctx = {
 
 apply(ctx)
 const names = [...registered.keys()].sort()
-if (names.length !== 2) throw new Error(`expected 2 tools, got ${names.join(', ') || 'none'}`)
+if (names.length !== 3) throw new Error(`expected 3 tools, got ${names.join(', ') || 'none'}`)
 if (guards.length !== 1) throw new Error(`expected 1 guard, got ${guards.length}`)
 console.log(`registered: ${names.join(', ')} (+1 guard)\n`)
 
@@ -59,6 +59,21 @@ console.log(create.output.render({}, createValue)[0].text)
 
 if (!createValue.checks.ok) throw new Error('the generated bundle did not pass its own structural check')
 if (!checkValue.ok) throw new Error(`${target} failed its structural check`)
+
+// The sandbox tool shares lib/sandbox.js with the CLI; try-sandbox.mjs covers the
+// engine, this only proves the tool is wired to it and reports an empty project.
+const sandbox = registered.get('dsh_sandbox')
+const sandboxEmpty = await sandbox.execute({ action: 'list', project: join(repo, 'tmp', 'empty-project') }, {})
+if (!sandboxEmpty.summary.includes('No sandboxes')) throw new Error(`dsh_sandbox list on an empty project said: ${sandboxEmpty.summary}`)
+let sandboxUnknown = 'threw'
+try {
+  await sandbox.execute({ action: 'remove', name: 'nope', project: repo }, {})
+  sandboxUnknown = 'did not throw'
+} catch (error) {
+  if (!/no sandbox/.test(error.message)) throw error
+}
+if (sandboxUnknown !== 'threw') throw new Error(`dsh_sandbox remove on an unknown sandbox: ${sandboxUnknown}`)
+console.log(`dsh_sandbox: ${sandboxEmpty.summary.split('\n')[0]}`)
 
 // --- install guard ---------------------------------------------------------
 const guard = guards[0]

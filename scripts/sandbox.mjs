@@ -1,549 +1,28 @@
 #!/usr/bin/env node
 /**
- * Sandboxes for plugin testing: one project, many isolated instances, all reused.
- *
- * A sandbox is a directory pair plus a profile and a port:
- *
- *   <project>/tmp/sandboxes/registry.json    the register (git-ignored)
- *   <project>/tmp/sandboxes/<name>/home/     DSH_HOME for that sandbox
- *   <project>/tmp/sandboxes/<name>/workspace/ the copy sessions actually run in
- *
- * Sandboxes are long-lived. `create` is for the first time only; after that the
- * same sandbox is reopened with `open`, because the expensive and private things
- * live in its home: the pnpm install, the profile's plugin versions, and the
- * model credentials the user adds once through the page.
+ * CLI front over `lib/sandbox.js` — the same engine the `dsh_sandbox` tool uses.
  *
  *   node scripts/sandbox.mjs list
- *   node scripts/sandbox.mjs create model --plugin <dir-or-spec>
- *   node scripts/sandbox.mjs open model            # print the command for the user
- *   node scripts/sandbox.mjs open model --run      # start it and print the URL
+ *   node scripts/sandbox.mjs create model --plugin <dir>
+ *   node scripts/sandbox.mjs start model            # launch it, print the URL
+ *   node scripts/sandbox.mjs open model             # print the command for the user
  *   node scripts/sandbox.mjs status model
+ *   node scripts/sandbox.mjs fix-workspace model
  *   node scripts/sandbox.mjs stop model
  *   node scripts/sandbox.mjs remove model --yes
+ *
+ * Sandboxes live in <project>/tmp/sandboxes/<name>/ with their own DSH_HOME,
+ * profile, port, and workspace copy, and they are never recreated implicitly.
  */
 
-import { spawn, spawnSync } from 'node:child_process'
-import { createServer } from 'node:net'
-import { existsSync, mkdirSync, openSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
-import { basename, join, resolve } from 'node:path'
+import { Sandboxes } from '../lib/sandbox.js'
 
-const FIRST_PORT = 3100
-const LAST_PORT = 3199
-const URL_PATTERN = /dsh web:\s+(http:\/\/\S+)/
-const START_TIMEOUT_MS = 60_000
+const FIRST_COLUMNS = { name: 12, port: 6, profile: 18 }
 
 function projectRoot() {
   const index = process.argv.indexOf('--project')
-  if (index >= 0 && process.argv[index + 1] !== undefined) return resolve(process.argv[index + 1])
+  if (index >= 0 && process.argv[index + 1] !== undefined) return process.argv[index + 1]
   return process.cwd()
-}
-
-const root = projectRoot()
-const sandboxesDir = join(root, 'tmp', 'sandboxes')
-const registryPath = join(sandboxesDir, 'registry.json')
-
-function readRegistry() {
-  try {
-    return JSON.parse(readFileSync(registryPath, 'utf8'))
-  } catch {
-    return { version: 1, sandboxes: {} }
-  }
-}
-
-function writeRegistry(registry) {
-  mkdirSync(sandboxesDir, { recursive: true })
-  writeFileSync(registryPath, `${JSON.stringify(registry, null, 2)}\n`, 'utf8')
-}
-
-function paths(name) {
-  const base = join(sandboxesDir, name)
-  return {
-    base,
-    home: join(base, 'home'),
-    workspace: join(base, 'workspace'),
-    log: join(base, 'open.log'),
-    marker: join(base, 'sandbox.json'),
-  }
-}
-
-/** Written into every sandbox folder so a copy can still name its project. */
-const MARKER_KIND = 'dsh-plugin-powerful/sandbox'
-const MARKER_VERSION = 1
-
-function writeMarker(name, entry) {
-  const target = paths(name)
-  writeFileSync(target.marker, `${JSON.stringify({
-    marker: MARKER_KIND,
-    markerVersion: MARKER_VERSION,
-    sandbox: name,
-    project: root,
-    profile: entry.profile,
-    port: entry.port,
-    plugin: entry.plugin,
-    home: target.home,
-    workspace: target.workspace,
-    createdAt: entry.createdAt,
-    note: 'Sandbox for testing a DSH plugin. It belongs to the project named above; its DSH_HOME is ./home. Never point another project at it, and never delete it to "reset" a run — create another sandbox instead.',
-  }, null, 2)}\n`, 'utf8')
-}
-
-/**
- * Refuse to operate on a sandbox folder that does not belong to this project.
- *
- * The registry is per project, so this only trips on a copied folder, a moved
- * checkout, or a registry written by an older version — exactly the cases where
- * silently reusing another project's sandbox would corrupt both.
- */
-function assertOwnership(name, entry) {
-  const target = paths(name)
-  if (!existsSync(target.marker)) {
-    // A folder created before markers existed, or one whose marker was deleted.
-    // Adopt it only when this project's own register points at exactly this
-    // folder; anything else is a copy of someone else's sandbox.
-    if (entry === undefined || resolve(entry.home) !== target.home) {
-      throw new Error(`sandbox "${name}" has no ${basename(target.marker)} marker (${target.base}) and the register does not vouch for it; remove the folder and create the sandbox again`)
-    }
-    writeMarker(name, entry)
-    console.log(`Note: ${target.base} had no marker; adopted it as a sandbox of this project.`)
-  }
-  let marker
-  try {
-    marker = JSON.parse(readFileSync(target.marker, 'utf8'))
-  } catch (error) {
-    throw new Error(`sandbox "${name}" has an unreadable marker: ${error.message}`)
-  }
-  if (marker.marker !== MARKER_KIND) {
-    throw new Error(`${target.base} is not a sandbox of this toolkit (marker: ${JSON.stringify(marker.marker)})`)
-  }
-  if (resolve(marker.project) !== root) {
-    throw new Error(`sandbox "${name}" belongs to another project: ${marker.project}\nRefusing to use it from ${root}. Run this from that project, or delete ${target.base} and create a fresh sandbox here`)
-  }
-  if (marker.sandbox !== name) {
-    throw new Error(`sandbox "${name}" has a marker for "${marker.sandbox}"; the folder was renamed or copied`)
-  }
-  if (entry !== undefined && entry.home !== undefined && resolve(entry.home) !== target.home) {
-    throw new Error(`sandbox "${name}" is registered with home ${entry.home}, but its folder is ${target.home}`)
-  }
-  return marker
-}
-
-function profileFor(name) {
-  return `sb-${name}`
-}
-
-/**
- * Pick a port free on this machine *and* unclaimed by another sandbox of this
- * project: two stopped sandboxes would otherwise both report the same port, and
- * `open` would then fight over it.
- */
-async function freePort(claimed = new Set()) {
-  for (let port = FIRST_PORT; port <= LAST_PORT; port += 1) {
-    if (claimed.has(port)) continue
-    if (await isPortFree(port)) return port
-  }
-  throw new Error(`no free port between ${FIRST_PORT} and ${LAST_PORT}`)
-}
-
-function isPortFree(port) {
-  return new Promise((resolvePort) => {
-    const server = createServer()
-    server.once('error', () => resolvePort(false))
-    server.once('listening', () => server.close(() => resolvePort(true)))
-    server.listen(port, '127.0.0.1')
-  })
-}
-
-/**
- * Whether a model was added to this sandbox.
- *
- * Byte size is not the signal: a fresh sandbox already writes a ~160-byte
- * skeleton that holds only `client-connection/browser-session`. A model shows up
- * as a further record (an account, an llm route) or a `refs` entry such as an
- * API key. Read the record names; never print the values.
- */
-function modelState(home) {
-  const path = join(home, '.credentials.yaml')
-  let text
-  try {
-    text = readFileSync(path, 'utf8')
-  } catch {
-    return 'absent'
-  }
-  const { records, refs } = credentialKeys(text)
-  const modelRecords = records.filter(key => key !== 'client-connection/browser-session')
-  if (modelRecords.length > 0 || refs.length > 0) return 'configured'
-  return 'none'
-}
-
-/** Collect the 2-space-indented keys under the top-level `records:` and `refs:` blocks. */
-function credentialKeys(text) {
-  const records = []
-  const refs = []
-  let section
-  for (const line of text.split(/\r?\n/)) {
-    if (line.trim().length === 0 || line.trimStart().startsWith('#')) continue
-    const indent = line.length - line.trimStart().length
-    const match = /^([^:]+):/.exec(line.trimStart())
-    if (match === null) continue
-    const key = match[1].trim()
-    if (indent === 0) {
-      section = key === 'records' || key === 'refs' ? key : undefined
-      continue
-    }
-    if (indent !== 2 || section === undefined) continue
-    if (section === 'records') records.push(key)
-    else refs.push(key)
-  }
-  return { records, refs }
-}
-
-/**
- * Point the sandbox's recorded workspace at the sandbox copy, and label it with
- * the sandbox identity so the page itself shows which sandbox is on screen.
- * Without the path change the sessions run in the user's real Documents project.
- */
-function patchWorkspace(home, workspace, title) {
-  const path = join(home, 'storages', 'workspace.json')
-  if (!existsSync(path)) return 'absent'
-  const parsed = JSON.parse(readFileSync(path, 'utf8'))
-  const entries = Object.values(parsed.tables?.workspaces ?? {})
-  if (entries.length === 0) return 'empty'
-  let changed = false
-  for (const entry of entries) {
-    if (entry.path === workspace && entry.title === title) continue
-    entry.path = workspace
-    entry.title = title
-    changed = true
-  }
-  if (changed) writeFileSync(path, `${JSON.stringify(parsed, null, 2)}\n`, 'utf8')
-  return changed ? 'patched' : 'already'
-}
-
-/** The label shown in the page's workspace title, e.g. `sandbox dsh-plugin-powerful/default`. */
-function workspaceTitle(name) {
-  return `sandbox ${basename(root)}/${name}`
-}
-
-/**
- * `dsh` is a `.cmd` shim on Windows, so it needs a shell; passing an argument
- * array with `shell: true` is deprecated and unescaped, so build one line.
- */
-const DSH_BIN = process.platform === 'win32' ? 'dsh.cmd' : 'dsh'
-
-function commandLine(args) {
-  return [DSH_BIN, ...args.map(shellQuote)].join(' ')
-}
-
-function shellQuote(value) {
-  return /[\s"]/.test(value) ? `"${value.replace(/"/g, '\\"')}"` : value
-}
-
-function runDsh(args, home) {
-  assertDsh()
-  const result = spawnSync(commandLine(args), {
-    encoding: 'utf8',
-    shell: true,
-    env: { ...process.env, DSH_HOME: home },
-  })
-  if (result.error !== undefined) throw new Error(`cannot run dsh: ${result.error.message}`)
-  if (result.status !== 0) {
-    throw new Error(`dsh ${args.join(' ')} failed (${result.status}):\n${result.stderr || result.stdout}`)
-  }
-  return result.stdout
-}
-
-/** `dsh` on PATH is a prerequisite for everything here; fail with a clear line. */
-function assertDsh() {
-  const probe = spawnSync(`${DSH_BIN} --help`, { encoding: 'utf8', shell: true })
-  if (probe.error !== undefined || probe.status !== 0) {
-    throw new Error('`dsh` is not runnable from this shell; put it on PATH (or use the launcher that provides it)')
-  }
-}
-
-function formatRow(name, port, profile, model) {
-  return `${String(name).padEnd(12)} ${String(port).padEnd(6)} ${String(profile).padEnd(18)} ${model}`
-}
-
-function formatSandbox(name, entry) {
-  const state = modelState(entry.home)
-  const model = state === 'configured' ? 'model: yes' : state === 'none' ? 'model: no' : 'model: no (no credentials file)'
-  return formatRow(name, entry.port, entry.profile, model)
-}
-
-function commandFor(entry) {
-  return [
-    `$env:DSH_HOME = "${entry.home}"`,
-    `dsh --profile ${entry.profile} --host 127.0.0.1 --port ${entry.port} --no-open`,
-  ]
-}
-
-async function commandCreate(name) {
-  if (!/^[a-z][a-z0-9-]*$/.test(name)) throw new Error('sandbox name must be lowercase letters, digits, and hyphens')
-  const registry = readRegistry()
-  if (registry.sandboxes[name] !== undefined) {
-    throw new Error(`sandbox "${name}" already exists; reuse it with: node scripts/sandbox.mjs open ${name}`)
-  }
-
-  const target = paths(name)
-  mkdirSync(target.home, { recursive: true })
-  mkdirSync(target.workspace, { recursive: true })
-
-  const plugin = flag('--plugin') ?? root
-  const profile = profileFor(name)
-  const port = await freePort(new Set(Object.values(registry.sandboxes).map(entry => entry.port)))
-
-  console.log(`Creating sandbox "${name}"`)
-  console.log(`  home      ${target.home}`)
-  console.log(`  workspace ${target.workspace}`)
-
-  runDsh(['--profile', profile, '--from-default-profile', 'web', '--dump-config'], target.home)
-  console.log(`  profile   ${profile} (copied from the shipped web template)`)
-
-  if (existsSync(join(plugin, 'package.json'))) {
-    runDsh(['plugin', '--profile', profile, 'add', `link:${resolve(plugin)}`], target.home)
-    console.log(`  plugin    link:${resolve(plugin)}`)
-  } else {
-    console.log(`  plugin    not installed (${plugin} is not a package directory); add it with:`)
-    console.log(`            $env:DSH_HOME = "${target.home}"; dsh plugin --profile ${profile} add <spec>`)
-  }
-
-  registry.sandboxes[name] = {
-    home: target.home,
-    workspace: target.workspace,
-    profile,
-    port,
-    plugin: resolve(plugin),
-    createdAt: new Date().toISOString(),
-  }
-  writeRegistry(registry)
-  writeMarker(name, registry.sandboxes[name])
-
-  console.log(`\nSandbox ready. Open it (the user adds a model once, then this sandbox is reused):`)
-  console.log(`  node scripts/sandbox.mjs open ${name}`)
-}
-
-async function commandOpen(name, run) {
-  const registry = readRegistry()
-  const entry = registry.sandboxes[name]
-  if (entry === undefined) throw new Error(`no sandbox "${name}"; create one with: node scripts/sandbox.mjs create ${name}`)
-  assertOwnership(name, entry)
-
-  const workspace = patchWorkspace(entry.home, entry.workspace, workspaceTitle(name))
-  if (workspace === 'absent' || workspace === 'empty') {
-    const why = workspace === 'absent' ? 'no storages/workspace.json yet' : 'the workspaces table is still empty'
-    console.log(`Note: the sandbox workspace is not registered yet (${why}).`)
-    console.log('The host writes that entry when the page first connects. After it loads, run:')
-    console.log(`  node scripts/sandbox.mjs fix-workspace ${name}`)
-    console.log('so sessions run in the sandbox copy instead of Documents\\deepseek-harness.\n')
-  }
-
-  if (!run) {
-    console.log(`Open sandbox "${name}" in your own terminal:\n`)
-    for (const line of commandFor(entry)) console.log(`  ${line}`)
-    console.log(`\nThen in the page: Settings → Models → add a model. The credentials land in this sandbox's home`)
-    console.log(`(${entry.home}), so every later \`open ${name}\` reuses them.`)
-    if (modelState(entry.home) === 'none') {
-      console.log(`\nCurrent state: no model yet. .credentials.yaml exists, but it holds only the browser session,`)
-      console.log(`so the page will say "choose a model" and messages will not send until one is added.`)
-    }
-    console.log(`\nTo start it here instead (no browser, for probing routes):`)
-    console.log(`  node scripts/sandbox.mjs open ${name} --run`)
-    return
-  }
-
-  assertDsh()
-  const target = paths(name)
-  mkdirSync(target.base, { recursive: true })
-  const logPath = target.log
-  const out = openSync(logPath, 'w')
-  const child = spawn(commandLine(['--profile', entry.profile, '--host', '127.0.0.1', '--port', String(entry.port), '--no-open']), {
-    shell: true,
-    detached: true,
-    stdio: ['ignore', out, out],
-    env: { ...process.env, DSH_HOME: entry.home },
-  })
-  child.unref()
-
-  const url = await waitForUrl(logPath, child.pid)
-  const after = patchWorkspace(entry.home, entry.workspace, workspaceTitle(name))
-  console.log(`Sandbox "${name}" is running (pid ${child.pid}).`)
-  console.log(`  url    ${url}`)
-  console.log(`  log    ${logPath}`)
-  if (after === 'patched') console.log('  note   workspace.json was rewritten to the sandbox workspace; reload the page')
-  if (modelState(entry.home) !== 'configured') {
-    console.log('\nNo model yet: open the URL above and add one in Settings → Models.')
-  }
-  console.log(`\nStop it with: node scripts/sandbox.mjs stop ${name}`)
-}
-
-async function waitForUrl(logPath, pid) {
-  const started = Date.now()
-  while (Date.now() - started < START_TIMEOUT_MS) {
-    await new Promise(done => setTimeout(done, 300))
-    let text = ''
-    try {
-      text = readFileSync(logPath, 'utf8')
-    } catch {
-      continue
-    }
-    const match = URL_PATTERN.exec(text)
-    if (match !== null) return match[1]
-    if (/Error|EADDRINUSE|did not activate/.test(text)) {
-      throw new Error(`sandbox failed to start (pid ${pid}); see ${logPath}:\n${text.slice(-2000)}`)
-    }
-  }
-  throw new Error(`timed out waiting for the sandbox URL (pid ${pid}); see ${logPath}`)
-}
-
-function commandList() {
-  const registry = readRegistry()
-  const names = Object.keys(registry.sandboxes).sort()
-  console.log(`project ${root}`)
-  console.log(`root    ${sandboxesDir}\n`)
-  if (names.length === 0) {
-    console.log('No sandboxes yet. Create one with: node scripts/sandbox.mjs create <name>')
-  } else {
-    console.log(formatRow('name', 'port', 'profile', 'model'))
-    for (const name of names) {
-      console.log(`${formatSandbox(name, registry.sandboxes[name])}${ownershipNote(name)}`)
-    }
-    console.log('\nReuse one with: node scripts/sandbox.mjs open <name>')
-  }
-
-  // A folder on disk that the register does not know, or the reverse, is the
-  // failure mode that makes someone run the wrong sandbox. Report both.
-  const onDisk = existsSync(sandboxesDir)
-    ? readdirSync(sandboxesDir, { withFileTypes: true }).filter(item => item.isDirectory()).map(item => item.name)
-    : []
-  const orphanFolders = onDisk.filter(name => registry.sandboxes[name] === undefined)
-  const missingFolders = names.filter(name => !onDisk.includes(name))
-
-  if (orphanFolders.length > 0) {
-    console.log('\nFolders not in the register:')
-    for (const name of orphanFolders) {
-      const marker = readMarkerQuietly(name)
-      const owner = marker === undefined ? 'no marker' : marker.project === root ? 'this project' : `project ${marker.project}`
-      console.log(`  ${name} (${owner}) — delete it, or re-create the sandbox with the same name`)
-    }
-  }
-  if (missingFolders.length > 0) {
-    console.log('\nRegistered sandboxes whose folder is gone:')
-    for (const name of missingFolders) console.log(`  ${name} — remove it with: node scripts/sandbox.mjs remove ${name} --yes`)
-  }
-}
-
-function readMarkerQuietly(name) {
-  try {
-    const marker = JSON.parse(readFileSync(paths(name).marker, 'utf8'))
-    return marker.marker === MARKER_KIND ? marker : undefined
-  } catch {
-    return undefined
-  }
-}
-
-/** Flag a registered sandbox whose folder says it belongs somewhere else. */
-function ownershipNote(name) {
-  const marker = readMarkerQuietly(name)
-  if (marker === undefined) return '  [no marker: run open once to adopt it]'
-  if (resolve(marker.project) !== root) return `  [belongs to ${marker.project}]`
-  if (marker.sandbox !== name) return `  [marker names "${marker.sandbox}"]`
-  return ''
-}
-
-async function commandStatus(name) {
-  const registry = readRegistry()
-  const entry = registry.sandboxes[name]
-  if (entry === undefined) throw new Error(`no sandbox "${name}"`)
-  assertOwnership(name, entry)
-
-  const free = await isPortFree(entry.port)
-  if (free) {
-    console.log(`${name}: not running (port ${entry.port} is free)`)
-    return
-  }
-  let text = ''
-  try {
-    text = readFileSync(paths(name).log, 'utf8')
-  } catch {
-    // No log: the instance was started elsewhere.
-  }
-  const match = URL_PATTERN.exec(text)
-  if (match === null) {
-    console.log(`${name}: port ${entry.port} is in use, but no URL was recorded in ${paths(name).log}`)
-    return
-  }
-  try {
-    const response = await fetch(match[1], { redirect: 'manual' })
-    console.log(`${name}: listening on ${entry.port}, HTTP ${response.status} (401 still means alive)`)
-  } catch (error) {
-    console.log(`${name}: port ${entry.port} is in use but the request failed: ${error.message}`)
-  }
-}
-
-function commandFixWorkspace(name) {
-  const registry = readRegistry()
-  const entry = registry.sandboxes[name]
-  if (entry === undefined) throw new Error(`no sandbox "${name}"`)
-  assertOwnership(name, entry)
-  const result = patchWorkspace(entry.home, entry.workspace, workspaceTitle(name))
-  const messages = {
-    absent: 'no storages/workspace.json yet: start the sandbox and load the page once, then run this again',
-    empty: 'the workspaces table is empty: load the page once so the host registers one, then run this again',
-    patched: `pointed the sandbox workspace at ${entry.workspace}; reload the page`,
-    already: `the sandbox workspace already points at ${entry.workspace}`,
-  }
-  console.log(`${name}: ${messages[result]}`)
-}
-
-function commandStop(name) {
-  const registry = readRegistry()
-  const entry = registry.sandboxes[name]
-  if (entry === undefined) throw new Error(`no sandbox "${name}"`)
-  assertOwnership(name, entry)
-  const pids = listenerPids(entry.port)
-  if (pids.length === 0) {
-    console.log(`${name}: nothing listening on port ${entry.port}`)
-    return
-  }
-  for (const pid of pids) {
-    spawnSync(`taskkill /PID ${pid} /F`, { shell: true, encoding: 'utf8' })
-    console.log(`${name}: stopped pid ${pid} (port ${entry.port})`)
-  }
-}
-
-function listenerPids(port) {
-  if (process.platform === 'win32') {
-    const output = spawnSync('netstat -ano', { encoding: 'utf8', shell: true }).stdout ?? ''
-    const pids = new Set()
-    for (const line of output.split(/\r?\n/)) {
-      if (!line.includes(`:${port} `) || !line.includes('LISTENING')) continue
-      const columns = line.trim().split(/\s+/)
-      const pid = columns[columns.length - 1]
-      if (/^\d+$/.test(pid)) pids.add(pid)
-    }
-    return [...pids]
-  }
-  const output = spawnSync('lsof', ['-ti', `tcp:${port}`], { encoding: 'utf8' }).stdout ?? ''
-  return output.split(/\s+/).filter(value => /^\d+$/.test(value))
-}
-
-function commandRemove(name, confirmed) {
-  const registry = readRegistry()
-  const entry = registry.sandboxes[name]
-  if (entry === undefined) throw new Error(`no sandbox "${name}"`)
-  const marker = assertOwnership(name, entry)
-  if (!confirmed) {
-    console.log(`Removing sandbox "${name}" deletes:`)
-    console.log(`  ${paths(name).base}`)
-    console.log(`It belongs to ${marker.project} and holds that sandbox's model credentials and plugin versions.`)
-    console.log(`Re-run with --yes to confirm: node scripts/sandbox.mjs remove ${name} --yes`)
-    return
-  }
-  if (listenerPids(entry.port).length > 0) commandStop(name)
-  rmSync(paths(name).base, { recursive: true, force: true })
-  delete registry.sandboxes[name]
-  writeRegistry(registry)
-  console.log(`removed sandbox "${name}"`)
 }
 
 function flag(name) {
@@ -551,12 +30,168 @@ function flag(name) {
   return index >= 0 ? process.argv[index + 1] : undefined
 }
 
+function row(name, port, profile, model) {
+  return `${String(name).padEnd(FIRST_COLUMNS.name)} ${String(port).padEnd(FIRST_COLUMNS.port)} ${String(profile).padEnd(FIRST_COLUMNS.profile)} ${model}`
+}
+
+function modelLabel(state) {
+  if (state === 'configured') return 'model: yes'
+  if (state === 'none') return 'model: no'
+  return 'model: no (no credentials file)'
+}
+
+function printList(sandboxes) {
+  const state = sandboxes.list()
+  console.log(`project ${state.project}`)
+  console.log(`root    ${state.directory}\n`)
+  if (state.sandboxes.length === 0) {
+    console.log('No sandboxes yet. Create one with: node scripts/sandbox.mjs create <name>')
+  } else {
+    console.log(row('name', 'port', 'profile', 'model'))
+    for (const item of state.sandboxes) {
+      const note = item.note.length > 0 ? `  [${item.note}]` : ''
+      console.log(`${row(item.name, item.port, item.profile, modelLabel(item.model))}${note}`)
+    }
+    console.log('\nReuse one with: node scripts/sandbox.mjs start <name>')
+  }
+  if (state.unregistered.length > 0) {
+    console.log('\nFolders not in the register:')
+    for (const item of state.unregistered) {
+      console.log(`  ${item.name} (${item.owner === null ? 'no marker' : item.owner === state.project ? 'this project' : `project ${item.owner}`}) — delete it, or create the sandbox again`)
+    }
+  }
+  if (state.missing.length > 0) {
+    console.log('\nRegistered sandboxes whose folder is gone:')
+    for (const name of state.missing) console.log(`  ${name} — remove it with: node scripts/sandbox.mjs remove ${name} --yes`)
+  }
+}
+
+async function main() {
+  const [command, name] = process.argv.slice(2)
+  const sandboxes = new Sandboxes(projectRoot())
+
+  switch (command) {
+    case 'list':
+      return printList(sandboxes)
+
+    case 'create': {
+      if (name === undefined) throw new Error('create needs a sandbox name')
+      const created = await sandboxes.create(name, { plugin: flag('--plugin') })
+      console.log(`Created sandbox "${created.name}"`)
+      console.log(`  home      ${created.home}`)
+      console.log(`  workspace ${created.workspace}`)
+      console.log(`  profile   ${created.profile}`)
+      console.log(`  port      ${created.port}`)
+      console.log(`  plugin    ${created.installed ? `link:${created.plugin}` : `not installed (${created.plugin} is not a package directory)`}`)
+      console.log(`\nStart it with: node scripts/sandbox.mjs start ${created.name}`)
+      return
+    }
+
+    case 'start': {
+      if (name === undefined) throw new Error('start needs a sandbox name')
+      const started = await sandboxes.start(name, { timeoutMs: Number(flag('--wait') ?? 45_000) })
+      if (started.alreadyRunning) {
+        console.log(`Sandbox "${name}" is already running on port ${started.url === undefined ? '?' : new URL(started.url).port}.`)
+      } else {
+        console.log(`Sandbox "${name}" is running (pid ${started.pid}).`)
+      }
+      if (started.url !== undefined) console.log(`  url  ${started.url}`)
+      console.log(`  log  ${started.logPath}`)
+      if (started.workspace === 'patched') console.log('  note workspace.json was rewritten to the sandbox workspace; reload the page')
+      if (started.model !== 'configured') {
+        console.log('\nNo model yet: open the URL above and add one in Settings → Models.')
+      }
+      return
+    }
+
+    case 'open': {
+      if (name === undefined) throw new Error('open needs a sandbox name')
+      const opened = sandboxes.open(name)
+      console.log(`Open sandbox "${name}" in your own terminal:\n`)
+      console.log(`  ${opened.command}`)
+      console.log(`  ${opened.command2}`)
+      console.log(`\nThen in the page: Settings → Models → add a model. The credentials land in this sandbox's home`)
+      console.log(`(${opened.home}), so every later open reuses them.`)
+      if (opened.model === 'none') {
+        console.log('\nCurrent state: no model yet. .credentials.yaml exists, but it holds only the browser session,')
+        console.log('so the page will say "choose a model" and messages will not send until one is added.')
+      }
+      if (opened.workspace === 'absent' || opened.workspace === 'empty') {
+        console.log('\nNote: the sandbox workspace is not registered yet. After the page loads once, run:')
+        console.log(`  node scripts/sandbox.mjs fix-workspace ${name}`)
+      }
+      console.log(`\nTo start it here instead (no browser, for probing routes):`)
+      console.log(`  node scripts/sandbox.mjs start ${name}`)
+      return
+    }
+
+    case 'status': {
+      if (name === undefined) throw new Error('status needs a sandbox name')
+      const status = await sandboxes.status(name)
+      if (!status.running) {
+        console.log(`${name}: not running (port ${status.port} is free)`)
+      } else if (status.http === undefined) {
+        console.log(`${name}: port ${status.port} is in use${status.url === undefined ? ' but no URL was recorded' : ` but the request failed: ${status.error ?? ''}`}`)
+      } else {
+        console.log(`${name}: listening on ${status.port}, HTTP ${status.http} (401 still means alive)`)
+      }
+      return
+    }
+
+    case 'fix-workspace': {
+      if (name === undefined) throw new Error('fix-workspace needs a sandbox name')
+      const result = sandboxes.patchWorkspace(name)
+      const messages = {
+        absent: 'no storages/workspace.json yet: start the sandbox and load the page once, then run this again',
+        empty: 'the workspaces table is empty: load the page once so the host registers one, then run this again',
+        patched: `pointed the sandbox workspace at the copy; reload the page`,
+        already: 'the sandbox workspace already points at the copy',
+      }
+      console.log(`${name}: ${messages[result]}`)
+      return
+    }
+
+    case 'stop': {
+      if (name === undefined) throw new Error('stop needs a sandbox name')
+      const stopped = sandboxes.stop(name)
+      console.log(stopped.stopped.length === 0
+        ? `${name}: nothing listening on port ${stopped.port}`
+        : `${name}: stopped ${stopped.stopped.length} process(es) on port ${stopped.port}`)
+      return
+    }
+
+    case 'remove': {
+      if (name === undefined) throw new Error('remove needs a sandbox name')
+      const result = sandboxes.remove(name, { confirmed: process.argv.includes('--yes') })
+      if (!result.confirmed) {
+        console.log(`Removing sandbox "${name}" deletes:`)
+        console.log(`  ${result.path}`)
+        console.log(`It belongs to ${result.project} and holds that sandbox's model credentials and plugin versions.`)
+        console.log(`Re-run with --yes to confirm: node scripts/sandbox.mjs remove ${name} --yes`)
+      } else {
+        console.log(`removed sandbox "${name}"`)
+      }
+      return
+    }
+
+    case 'help':
+    case '--help':
+    case '-h':
+    case undefined:
+      return usage()
+
+    default:
+      throw new Error(`unknown command "${command}"; run with --help`)
+  }
+}
+
 function usage() {
   console.log(`Sandboxes for plugin testing: one project, many instances, reused.
 
   node scripts/sandbox.mjs list
-  node scripts/sandbox.mjs create <name> [--plugin <dir>] [--project <dir>]
-  node scripts/sandbox.mjs open <name> [--run]
+  node scripts/sandbox.mjs create <name> [--plugin <dir>]
+  node scripts/sandbox.mjs start <name> [--wait <ms>]     launch and print the URL
+  node scripts/sandbox.mjs open <name>                    print the command for the user
   node scripts/sandbox.mjs status <name>
   node scripts/sandbox.mjs fix-workspace <name>
   node scripts/sandbox.mjs stop <name>
@@ -565,38 +200,6 @@ function usage() {
 Sandboxes live in <project>/tmp/sandboxes/<name>/ with their own DSH_HOME,
 profile, port, and workspace copy. They are never recreated implicitly: the
 model credentials a user adds once stay in the sandbox home.`)
-}
-
-async function main() {
-  const [command, name] = process.argv.slice(2)
-  switch (command) {
-    case 'list': return commandList()
-    case 'create':
-      if (name === undefined) throw new Error('create needs a sandbox name')
-      return await commandCreate(name)
-    case 'open':
-      if (name === undefined) throw new Error('open needs a sandbox name')
-      return await commandOpen(name, process.argv.includes('--run'))
-    case 'status':
-      if (name === undefined) throw new Error('status needs a sandbox name')
-      return await commandStatus(name)
-    case 'stop':
-      if (name === undefined) throw new Error('stop needs a sandbox name')
-      return commandStop(name)
-    case 'fix-workspace':
-      if (name === undefined) throw new Error('fix-workspace needs a sandbox name')
-      return commandFixWorkspace(name)
-    case 'remove':
-      if (name === undefined) throw new Error('remove needs a sandbox name')
-      return commandRemove(name, process.argv.includes('--yes'))
-    case 'help':
-    case '--help':
-    case '-h':
-    case undefined:
-      return usage()
-    default:
-      throw new Error(`unknown command "${command}"; run with --help`)
-  }
 }
 
 main().catch((error) => {

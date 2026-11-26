@@ -131,20 +131,21 @@ dsh rescue --from-default-profile web    # 把玩坏的 profile 从出货模板�
 `tmp/` 是产物目录，不进 git。每个沙盒的名字、端口、profile 都由登记表管，不要靠记忆。
 **端口按项目内唯一分配**（登记表里占用的端口会跳过），否则两个停着的沙盒会撞在同一个端口上。
 
-有 `scripts/sandbox.mjs` 时（本仓库自带，生成的插件项目也可以拷过去）优先用它：
+有 `dsh_sandbox` 工具时（创造模式默认有，**任何项目都能用**，项目根取会话工作目录）优先用它：
 
-```powershell
-node scripts/sandbox.mjs list
-node scripts/sandbox.mjs create default --plugin <插件目录>
-node scripts/sandbox.mjs open default
-node scripts/sandbox.mjs status default
-node scripts/sandbox.mjs stop default
-```
+| 调用 | 作用 |
+|---|---|
+| `dsh_sandbox { action: 'list' }` | 列出沙盒：端口、profile、有没有模型、标记有没有问题 |
+| `dsh_sandbox { action: 'create', name: 'default', plugin: '<插件目录>' }` | 建沙盒、复制 profile、`link:` 装插件 |
+| `dsh_sandbox { action: 'start', name: 'default' }` | **起实例并返回 URL**，你可以立刻去打 HTTP 探针 |
+| `dsh_sandbox { action: 'open', name: 'default' }` | 只打印命令，给用户自己开（他要加模型时用这个） |
+| `dsh_sandbox { action: 'status' / 'stop' / 'remove' }` | 探活 / 停 / 删（`remove` 要 `confirm: true`） |
 
-`list` 除了列出登记表，还会报两种容易认错的情况：**磁盘上有、登记表里没有的文件夹**（拷来的、
-或旧版本留下的），以及**登记表里有、文件夹已经没了的条目**。看到这两种先处理掉，别在上面继续跑。
+`start` 与 `open` 的区别就是「谁按下去」：**`start` 你起、你探、然后把 URL 交给用户去加模型**；
+`open` 是把命令交给用户，他自己在终端起。加模型这一步两种方式都一样要用户做，做一次就记住。
 
-没有脚本时，等价的手工步骤在 §3.1 / §3.3；两种做法的判据一样。
+同一个引擎也有 CLI（`node scripts/sandbox.mjs …`），但那只在本仓库里有；别的项目用工具。
+没有工具也没有脚本时，手工步骤在 §3.1 / §3.3，判据一样。
 
 ### 3.1 建沙盒（只在第一次）
 
@@ -201,8 +202,9 @@ dsh --profile sb-default --host 127.0.0.1 --port 3100 --no-open
 然后让他打开打印出来的 `?token=` 地址，在 **Settings → Models** 里加一次模型。
 加完凭据就落在这个沙盒的 home 里，**以后每次 `open` 都复用，不用再加**。
 
-- 用脚本时：`node scripts/sandbox.mjs open default` 会直接打印这两行和当前模型状态；
-  `open default --run` 则由你后台起实例、打印 URL——适合你去打 HTTP 探针，但**加模型仍然让用户做**。
+- 用工具时：`dsh_sandbox { action: 'start' }` 由你起实例、拿到 URL，**加模型仍然让用户做**——
+  把 URL 给他，说一句「在这里加一次模型，之后这个沙盒一直复用」；
+  `dsh_sandbox { action: 'open' }` 则把两行命令打印出来交给用户，让他自己开。
 - 沙盒的 `.credentials.yaml` 里**只有 `client-connection/browser-session`** 时，页面会显示「请选择模型」，
   消息发不出去、会话建不出来。**看记录名，不要看文件大小**（见 §3.7）。
 

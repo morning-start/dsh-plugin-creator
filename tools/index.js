@@ -18,6 +18,7 @@ import { existsSync, readFileSync } from 'node:fs'
 import { isAbsolute, join, resolve } from 'node:path'
 import { inspectBundle } from '../lib/bundle-check.js'
 import { scaffold } from '../lib/scaffold.js'
+import { Sandboxes } from '../lib/sandbox.js'
 
 export const name = 'powerful-tools'
 export const inject = ['tools']
@@ -29,6 +30,7 @@ export const inject = ['tools']
 export function apply(ctx) {
   ctx.effect(() => ctx.tools.register(pluginCheck), 'dsh-plugin-powerful/dsh_plugin_check')
   ctx.effect(() => ctx.tools.register(pluginNew(() => sessionDirectory(ctx))), 'dsh-plugin-powerful/dsh_plugin_new')
+  ctx.effect(() => ctx.tools.register(sandboxTool(() => sessionDirectory(ctx))), 'dsh-plugin-powerful/dsh_sandbox')
   ctx.effect(() => ctx.tools.guard(localInstallGuard), 'dsh-plugin-powerful/no-local-install')
 }
 
@@ -299,6 +301,168 @@ function pluginNew(defaultDirectory) {
             .filter(check => check.status !== 'pass')
             .map(check => `${check.status.toUpperCase()} ${check.id}: ${check.message}`),
         },
+      }
+    },
+  }
+}
+
+/**
+ * Manage the project's sandboxes: create, launch, probe, stop, remove.
+ *
+ * The work is `lib/sandbox.js`, shared with `scripts/sandbox.mjs`. Having it as a
+ * tool is what makes the automation usable in *any* project: the skill no longer
+ * depends on the project shipping a script, and the launcher is resolved from the
+ * Host executable instead of PATH.
+ */
+function sandboxTool(defaultDirectory) {
+  return {
+    name: 'dsh_sandbox',
+    description:
+      'Manage isolated dsh web sandboxes for testing a plugin: one project can hold several (daily iteration, a clean reproduction, client UI states), each with its own DSH_HOME, profile, port, and workspace copy. Sandboxes are reused across runs — the installed plugin versions and the model credentials the user adds once stay in the sandbox home. `start` launches one and returns its URL so you can probe it immediately; `open` only prints the command for the user, for when they need to add a model themselves.',
+    parameters: {
+      type: 'object',
+      properties: {
+        action: {
+          type: 'string',
+          enum: ['list', 'create', 'start', 'open', 'status', 'fix-workspace', 'stop', 'remove'],
+          description: 'list the sandboxes; create a new one; start it; print the command for the user; probe it; point its workspace at the sandbox copy; stop it; remove it.',
+        },
+        name: { type: 'string', description: 'Sandbox name, lowercase letters, digits, and hyphens. Required for every action except list.' },
+        project: { type: 'string', description: 'Project root whose tmp/sandboxes holds the sandboxes. Defaults to the session working directory.' },
+        plugin: { type: 'string', description: 'For create: the plugin directory to install (link:). Defaults to the project root.' },
+        waitMs: { type: 'integer', description: 'For start: how long to wait for the URL before failing. Defaults to 45000.' },
+        confirm: { type: 'boolean', description: 'For remove: must be true. Removing deletes the model credentials added in that sandbox.' },
+      },
+      required: ['action'],
+    },
+    output: {
+      schema: {
+        type: 'object',
+        properties: {
+          action: { type: 'string' },
+          ok: { type: 'boolean' },
+          summary: { type: 'string', description: 'What happened, in the terms the user sees.' },
+          data: { type: 'object', additionalProperties: true },
+        },
+        required: ['action', 'ok', 'summary', 'data'],
+      },
+      render: (_args, value) => [{ type: 'text', text: value.summary }],
+    },
+    async execute(args, exec) {
+      const action = String(args.action)
+      const name = args.name === undefined ? undefined : String(args.name)
+      if (action !== 'list' && name === undefined) throw new Error(`${action} needs a name`)
+
+      const project = args.project === undefined ? defaultDirectory(exec) : resolve(String(args.project))
+      if (project === undefined) {
+        throw new Error('project is required: this deployment exposes no working directory for the session')
+      }
+      const sandboxes = new Sandboxes(project)
+      const done = (summary, data) => ({ action, ok: true, summary, data })
+
+      switch (action) {
+        case 'list': {
+          const state = sandboxes.list()
+          if (state.sandboxes.length === 0 && state.unregistered.length === 0) {
+            return done(`No sandboxes in ${state.project}. Create one with action "create".`, state)
+          }
+          const lines = [`Sandboxes in ${state.project}:`]
+          for (const item of state.sandboxes) {
+            const note = item.note.length > 0 ? `  [${item.note}]` : ''
+            lines.push(`  ${item.name}  port ${item.port}  profile ${item.profile}  model: ${item.model === 'configured' ? 'yes' : 'no'}${note}`)
+          }
+          if (state.unregistered.length > 0) {
+            lines.push('Folders not in the register:')
+            for (const item of state.unregistered) lines.push(`  ${item.name} (${item.owner ?? 'no marker'})`)
+          }
+          if (state.missing.length > 0) lines.push(`Registered but missing on disk: ${state.missing.join(', ')}`)
+          return done(lines.join('\n'), state)
+        }
+
+        case 'create': {
+          const created = await sandboxes.create(name, { plugin: args.plugin })
+          return done(
+            `Created sandbox "${created.name}" (port ${created.port}, profile ${created.profile}).\n` +
+              `Plugin: ${created.installed ? `link:${created.plugin}` : `NOT installed — ${created.plugin} is not a package directory`}.\n` +
+              `Start it with action "start", then have the user add a model in Settings → Models.`,
+            created,
+          )
+        }
+
+        case 'start': {
+          const started = await sandboxes.start(name, { timeoutMs: args.waitMs === undefined ? undefined : Number(args.waitMs) })
+          const lines = [
+            started.alreadyRunning
+              ? `Sandbox "${name}" was already running.`
+              : `Sandbox "${name}" is running (pid ${started.pid}).`,
+          ]
+          if (started.url !== undefined) lines.push(`URL: ${started.url}`)
+          lines.push(`Log: ${started.logPath}`)
+          if (started.workspace === 'patched') lines.push('workspace.json was rewritten to the sandbox workspace; reload the page.')
+          if (started.model !== 'configured') {
+            lines.push('No model yet: give the user that URL and ask them to add one in Settings → Models. That is the one step they must do; it is remembered by this sandbox.')
+          }
+          return done(lines.join('\n'), started)
+        }
+
+        case 'open': {
+          const opened = sandboxes.open(name)
+          const lines = [
+            `Sandbox "${name}" — the user runs this in their own terminal:`,
+            `  ${opened.command}`,
+            `  ${opened.command2}`,
+            `Then they add a model once in Settings → Models; it stays in ${opened.home}.`,
+          ]
+          if (opened.model === 'none') lines.push('Current state: no model, so the page will say "choose a model" and messages will not send.')
+          if (opened.workspace === 'absent' || opened.workspace === 'empty') {
+            lines.push(`The workspace entry is not registered yet; after the page loads once, run action "fix-workspace".`)
+          }
+          return done(lines.join('\n'), opened)
+        }
+
+        case 'status': {
+          const status = await sandboxes.status(name)
+          if (!status.running) return done(`${name}: not running (port ${status.port} is free).`, status)
+          if (status.http === undefined) return done(`${name}: port ${status.port} is in use but the probe did not answer.`, status)
+          return done(`${name}: listening on ${status.port}, HTTP ${status.http} (401 still means alive).`, status)
+        }
+
+        case 'fix-workspace': {
+          const result = sandboxes.patchWorkspace(name)
+          const messages = {
+            absent: 'no storages/workspace.json yet: start the sandbox and load the page once, then run this again',
+            empty: 'the workspaces table is empty: load the page once so the host registers one, then run this again',
+            patched: 'pointed the sandbox workspace at the copy; reload the page',
+            already: 'the sandbox workspace already points at the copy',
+          }
+          return done(`${name}: ${messages[result]}`, { result })
+        }
+
+        case 'stop': {
+          const stopped = sandboxes.stop(name)
+          return done(
+            stopped.stopped.length === 0
+              ? `${name}: nothing listening on port ${stopped.port}.`
+              : `${name}: stopped ${stopped.stopped.length} process(es) on port ${stopped.port}.`,
+            stopped,
+          )
+        }
+
+        case 'remove': {
+          const result = sandboxes.remove(name, { confirmed: args.confirm === true })
+          if (!result.confirmed) {
+            return {
+              action,
+              ok: false,
+              summary: `Refusing to remove "${name}" without confirm: true. It deletes ${result.path} — the model credentials added there and the installed plugin versions. Ask the user first.`,
+              data: result,
+            }
+          }
+          return done(`removed sandbox "${name}".`, result)
+        }
+
+        default:
+          throw new Error(`unknown action "${action}"`)
       }
     },
   }

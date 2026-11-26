@@ -8,6 +8,7 @@ A plugin-development toolkit for DeepSeek Harness (DSH). Installing it adds tool
 |---|---|---|
 | Tool | `dsh_plugin_check` | Read-only structural check of a bundle directory: manifest fields, the declared `dsh.bundle.patch`, exported locale and icon resources, the entry module, the declared detail document, the `files` whitelist, and relative module names in the patch. Reports pass / warn / fail per check instead of throwing on the first problem. |
 | Tool | `dsh_plugin_new` | Generates a complete plugin package from the standard template: manifest, bundle patch, entry module, locale dictionaries, icon, README, optionally an example tool and a skill. Deterministic, and it runs `dsh_plugin_check` on its own output before returning. |
+| Tool | `dsh_sandbox` | Manages the project's test sandboxes: list, create, start, status, fix-workspace, stop, remove. `start` launches one and returns its URL so the agent can probe it in the same turn; `open` prints the command for the user, who adds a model once. |
 | Skill | `dsh-plugin-new` | The interview behind that tool: which fields to ask for, which decisions belong to the user, and what to do with each warning in the report. |
 | Skill | `dsh-plugin-sandbox` | 插件沙盒测试: how to test a plugin in `dsh web` sandboxes — one project can hold several, each with its own `DSH_HOME`, profile, port, and workspace copy, all reused across runs. Includes the traps that produce "installed but not working". |
 
@@ -22,6 +23,10 @@ Filling a template is deterministic string work; interviewing a user is judgment
 - **`scripts/new-bundle.mjs`** — CLI over the engine, for a `plan.json` or a human at a terminal.
 - **`dsh_plugin_new`** — tool over the same engine, so an agent does not hand-quote shell arguments.
 - **`dsh-plugin-new`** — the skill. It only decides what to ask and what to do with the answer.
+
+The sandbox follows the same shape, with one layer fewer: `lib/sandbox.js` is the engine, `scripts/sandbox.mjs` and the `dsh_sandbox` tool are its two fronts, and the `dsh-plugin-sandbox` skill holds the judgment (which sandbox, when to rebuild, what counts as tested). There is no template layer, because a sandbox renders no files — inventing one would be ceremony.
+
+The tool front is not decoration: it is what makes the automation work outside this repository (the project root comes from the session, not from this package) and what makes it independent of PATH (the launcher is derived from the Host executable).
 
 Selection, not template logic: the template directory holds one file per variant (`index.js.tpl` vs `index.min.js.tpl`, `cordis.patch.yml.tpl` vs `cordis.patch.skill.yml.tpl`), and the engine picks files. Unresolved `{{placeholders}}` after rendering are an error, so a typo in a template fails loudly instead of shipping.
 
@@ -62,13 +67,17 @@ Sandboxes live under the project's own `tmp/`, never in `~/.dsh` or a system tem
 ```powershell
 node scripts/sandbox.mjs list
 node scripts/sandbox.mjs create default --plugin .
-node scripts/sandbox.mjs open default            # print the command for the user to run
-node scripts/sandbox.mjs open default --run      # start it here and print the URL
+node scripts/sandbox.mjs start default             # launch it here, print the URL
+node scripts/sandbox.mjs open default              # print the command for the user
 node scripts/sandbox.mjs fix-workspace default
 node scripts/sandbox.mjs status default
 node scripts/sandbox.mjs stop default
 node scripts/sandbox.mjs remove default --yes
 ```
+
+The `dsh_sandbox` tool exposes the same actions over `lib/sandbox.js`, and that is the form to prefer from an agent: it works in **any** project (the root comes from the session working directory, not from this package), and it resolves the `dsh` launcher from the Host executable rather than PATH — the desktop app's PATH is not the user's shell PATH.
+
+`start` and `open` differ only in who presses the button. `start` launches the instance and returns its URL, so the agent can probe routes in the same turn; `open` prints the two lines for the user to run themselves. Either way **the model is added by the user, once**, in Settings → Models — the sandbox remembers it.
 
 **Model credentials stay with the user.** A sandbox starts with only a browser-session record in `.credentials.yaml`; the page then says "choose a model" and nothing sends. `open` prints the two lines the user runs in their own terminal, and they add the model once in Settings → Models. It lands in that sandbox's home and every later `open` reuses it — no script copies the user's credentials around. `list` reports `model: yes / no` by reading the record names, because the file is never empty in this DSH version (~160 bytes of skeleton even with no model).
 
@@ -117,6 +126,7 @@ index.js              Host half (registers nothing yet; future shared services)
 tools/index.js        preset-scoped half: dsh_plugin_check, dsh_plugin_new
 lib/bundle-check.js   the structural checker (shared by both tools)
 lib/scaffold.js       the template engine (shared by the tool and the CLI)
+lib/sandbox.js        the sandbox engine (shared by the tool and the CLI)
 templates/bundle/     the standard plugin template, one file per variant
 skills/               skills mounted into Creator mode
 locale/{en,zh}.json   Plugin Manager title / description / detail path
@@ -157,11 +167,12 @@ The package is plain ESM with **no dependencies and no build step**, on purpose:
 Two checks need no Host:
 
 ```powershell
-node scripts/try-tool.mjs .        # mount both tools on a stub context; check this repo, then scaffold into tmp/smoke-output
+node scripts/try-tool.mjs .        # mount all three tools + the guard on a stub context
+node scripts/try-sandbox.mjs       # the sandbox engine, with a fake dsh launcher
 node scripts/check-patch.mjs .     # parse cordis.patch.yml and diff it against the shipped preset
 ```
 
-`try-tool.mjs` is the regression test for the template: it fails when the generated bundle does not pass its own structural check, so a template edit that breaks the output is caught without installing anything.
+`try-tool.mjs` is the regression test for the template: it fails when the generated bundle does not pass its own structural check, so a template edit that breaks the output is caught without installing anything. `try-sandbox.mjs` drives create / start / status / stop against a fake launcher — no profile is bootstrapped and no real port is taken — and covers the ownership marker, port uniqueness, workspace patching, and the credential record scan.
 
 `check-patch.mjs` parses the patch with the same YAML library DSH uses and compares the Creator-mode override with `@deepseek-ai/dsh-web-app/presets/cordis.patch.yml`: dropped rows, changed row order, a changed plan-mode section, and unexpected additions all fail. Against the Desktop install that file lives inside `app.asar`, so run it with the DSH runtime instead of `node`:
 

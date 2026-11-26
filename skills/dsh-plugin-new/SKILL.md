@@ -73,8 +73,9 @@ dsh_plugin_new({
 `dsh-plugin-powerful` 的 guard 会直接拒绝本地目录安装（`install_bundle` 的目录 target、`dsh plugin add link:`），
 除非那个宿主本身就是沙盒。被拒不要绕，去开沙盒或问用户。
 
-1. 沙盒里装：`node scripts/sandbox.mjs create dev --plugin <生成的目录>` → `open dev`
-   （没有这个脚本时按 `dsh-plugin-sandbox` 技能手工建沙盒）。
+1. 沙盒里装：`dsh_sandbox { action: 'create', name: 'dev', plugin: '<生成的目录>' }` →
+   `dsh_sandbox { action: 'start', name: 'dev' }` 拿到 URL，交给用户去加模型
+   （没有这个工具时按 `dsh-plugin-sandbox` 技能手工建沙盒）。
 2. `dsh --profile sb-dev --dump-config` 里能看到那一行，且没有 activation 诊断。
 3. **新开**一个会话再验：调一次工具 / 看 skill 目录。已有会话不会变——预设是建会话时解析的。
 4. 页面里的图标、标题、描述是渲染结果，没看到就不要说「显示正常」。
