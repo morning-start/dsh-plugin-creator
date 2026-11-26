@@ -242,6 +242,10 @@ function pluginNew(defaultDirectory) {
         withTool: { type: 'boolean', description: 'Include and register an example tool (default true). Set false for a plugin that only wires services or a skill.' },
         withSkill: { type: 'boolean', description: 'Include a SKILL.md and a skill-provider row (default false). The skill is then listed in every preset, not only Creator mode.' },
         force: { type: 'boolean', description: 'Write into a directory that already has files, overwriting only the files this template generates.' },
+        recipe: {
+          type: 'string',
+          description: 'Directory of another scheme to generate from (a folder holding recipe.json plus its templates). Defaults to the built-in bundle scheme.',
+        },
         configPath: {
           type: 'string',
           description: 'Read any of the fields above from a JSON file instead of the arguments; arguments that are also given win. Use it when a plan already exists on disk.',

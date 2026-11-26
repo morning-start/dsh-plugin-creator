@@ -1,0 +1,195 @@
+{
+  "name": "bundle",
+  "version": 1,
+  "description": "A DSH plugin bundle: manifest, patch layer, entry module, locale dictionaries, icon, README, and optionally an example tool and a skill.",
+  "variables": [
+    {
+      "name": "withTool",
+      "type": "boolean",
+      "default": true
+    },
+    {
+      "name": "withSkill",
+      "type": "boolean",
+      "default": false
+    },
+    {
+      "name": "packageName",
+      "required": true,
+      "transform": "trim",
+      "pattern": "^(@[a-z0-9][a-z0-9._-]*/)?[a-z0-9][a-z0-9._-]*$",
+      "patternMessage": "use a lowercase npm name such as \"dsh-plugin-my-thing\" or \"@scope/my-thing\"",
+      "message": "the npm package name"
+    },
+    {
+      "name": "title",
+      "required": true,
+      "transform": "single-line",
+      "message": "the name users see in Plugin Manager"
+    },
+    {
+      "name": "description",
+      "required": true,
+      "transform": "trim",
+      "message": "what the plugin does, in the user's language"
+    },
+    {
+      "name": "version",
+      "default": "0.1.0",
+      "transform": "trim",
+      "pattern": "^\\d+\\.\\d+\\.\\d+(-[0-9A-Za-z.-]+)?$"
+    },
+    {
+      "name": "rowId",
+      "derive": "rowId",
+      "transform": "trim",
+      "pattern": "^[a-z][a-z0-9-]*$",
+      "patternMessage": "use lowercase letters, digits, and hyphens, starting with a letter"
+    },
+    {
+      "name": "toolName",
+      "derive": "toolName",
+      "when": "withTool",
+      "transform": "trim",
+      "pattern": "^[a-z][a-z0-9_]*$",
+      "patternMessage": "use lowercase letters, digits, and underscores"
+    },
+    {
+      "name": "skillName",
+      "derive": "skillName",
+      "when": "withSkill",
+      "transform": "trim",
+      "pattern": "^[a-z][a-z0-9-]*$",
+      "patternMessage": "use lowercase letters, digits, and hyphens"
+    },
+    {
+      "name": "titleZh",
+      "transform": "single-line"
+    },
+    {
+      "name": "descriptionZh",
+      "transform": "trim"
+    },
+    {
+      "name": "summary",
+      "derive": "summary"
+    },
+    {
+      "name": "verify",
+      "derive": "verify"
+    },
+    {
+      "name": "manifestFiles",
+      "derive": "manifestFiles"
+    },
+    {
+      "name": "localeTitleZh",
+      "derive": "localeTitleZh"
+    },
+    {
+      "name": "localeDescriptionZh",
+      "derive": "localeDescriptionZh"
+    }
+  ],
+  "files": [
+    {
+      "from": "package.json.tpl",
+      "to": "package.json"
+    },
+    {
+      "from": "locale-en.json.tpl",
+      "to": "locale/en.json"
+    },
+    {
+      "from": "locale-zh.json.tpl",
+      "to": "locale/zh.json",
+      "when": "titleZh || descriptionZh"
+    },
+    {
+      "from": "cordis.patch.yml.tpl",
+      "to": "cordis.patch.yml",
+      "when": "!withSkill"
+    },
+    {
+      "from": "cordis.patch.skill.yml.tpl",
+      "to": "cordis.patch.yml",
+      "when": "withSkill"
+    },
+    {
+      "from": "index.js.tpl",
+      "to": "index.js",
+      "when": "withTool"
+    },
+    {
+      "from": "index.min.js.tpl",
+      "to": "index.js",
+      "when": "!withTool"
+    },
+    {
+      "from": "tools-example.js.tpl",
+      "to": "tools/example.js",
+      "when": "withTool"
+    },
+    {
+      "from": "skill.md.tpl",
+      "to": "skills/{{skillName}}/SKILL.md",
+      "when": "withSkill"
+    },
+    {
+      "from": "README.md.tpl",
+      "to": "README.md"
+    },
+    {
+      "from": "icon.svg",
+      "to": "icon.svg"
+    },
+    {
+      "from": "gitignore.txt",
+      "to": ".gitignore",
+      "package": false
+    },
+    {
+      "from": "gitattributes.txt",
+      "to": ".gitattributes",
+      "package": false
+    }
+  ],
+  "rules": [
+    {
+      "id": "recipe:placeholder-free",
+      "type": "placeholder-free"
+    },
+    {
+      "id": "recipe:files-listed",
+      "type": "files-listed",
+      "manifest": "package.json"
+    },
+    {
+      "id": "recipe:manifest",
+      "type": "json-field",
+      "path": "package.json",
+      "field": "dsh.bundle.patch",
+      "equals": "./cordis.patch.yml"
+    },
+    {
+      "id": "recipe:entry",
+      "type": "file-exists",
+      "path": "index.js"
+    },
+    {
+      "id": "recipe:patch",
+      "type": "file-exists",
+      "path": "cordis.patch.yml"
+    },
+    {
+      "id": "recipe:skill-name",
+      "type": "frontmatter-name",
+      "path": "skills/{{skillName}}/SKILL.md",
+      "equals": "{{skillName}}",
+      "when": "withSkill"
+    }
+  ],
+  "warnings": {
+    "derive": "warnings"
+  }
+}

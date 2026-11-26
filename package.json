@@ -16,6 +16,7 @@
     "sandbox": "node scripts/sandbox.mjs",
     "check:patch": "node scripts/check-patch.mjs .",
     "check:skills": "node scripts/check-skills.mjs",
+    "check:generate": "node scripts/try-generate.mjs",
     "check:sandbox": "node scripts/try-sandbox.mjs",
     "check:tool": "node scripts/try-tool.mjs ."
   },

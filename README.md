@@ -22,11 +22,36 @@ The first design rule: **Creator mode's own tools are this plugin's foundation.*
 
 Everything is mounted inside the Creator-mode preset, so a Standard, PTC, Minimal, or Data-analysis session sees no new tool, no new prompt section, and no new skill.
 
+## Schemes: template + config + command
+
+Generating a plugin is one instance of a general capability, so it is built as one. A **scheme** is a directory holding a `recipe.json` (variables, file mapping, conditions, rules), its templates (one file per variant), and — only where something must be computed — a small module of `derive` hooks:
+
+```
+templates/bundle/
+  recipe.json          variables, files, when-clauses, rules, warnings
+  *.tpl                one file per variant; never evaluated as code
+lib/generate.js        the generic engine: variables → files → rules
+lib/rules.js           declarative structure checks
+lib/scaffold.js        the bundle scheme: derive hooks + the deep bundle check
+```
+
+The engine knows nothing about plugins. That is what makes a new scheme a directory instead of a new generator: describe the variables, map the files, declare the invariants, and the same `dsh_plugin_new` tool and `new-bundle` CLI will drive it (`--recipe <dir>` / `{ recipe }`).
+
+Three properties are enforced rather than documented, because they are what makes generators untrustworthy:
+
+- **Selection, not conditionals** — a variant is a different template file chosen by a `when` clause, so templates stay readable text and the choice logic is visible in one place.
+- **Unresolved placeholders are fatal** — a leftover `{{token}}` means the recipe and the template disagree; failing beats shipping half a file.
+- **Rules run on the output** — `placeholder-free`, `files-listed` (every generated file must be inside `package.json` `files`), `json-field`, `frontmatter-name`. The bundle's own rules already caught a real bug: `.gitignore` and `.gitattributes` were generated but not marked as local-only, so they showed up as uncovered package content.
+
+JSON is rendered from a template too, with `{{name|json}}` for escaping, so "what gets generated" has exactly one source of truth.
+
+The full format — every variable field, the `when` grammar, the rule types, and how to add a scheme — is in [docs/SCHEMES.md](docs/SCHEMES.md).
+
 ## Why a tool, a skill, and a CLI — not one of them
 
 Filling a template is deterministic string work; interviewing a user is judgment. Mixing them is what makes template generators unreliable, so the split is:
 
-- **`lib/scaffold.js`** — the engine. Pure, zero-dependency, testable.
+- **`lib/scaffold.js`** — the bundle scheme. Its structure is data in `templates/bundle/recipe.json`; only the derived values live in code.
 - **`templates/bundle/`** — the template. Files in the package, not skill resources, so they are checked by `dsh_plugin_check` and never drift from what ships.
 - **`scripts/new-bundle.mjs`** — CLI over the engine, for a `plan.json` or a human at a terminal.
 - **`dsh_plugin_new`** — tool over the same engine, so an agent does not hand-quote shell arguments.
@@ -141,9 +166,11 @@ cordis.patch.yml      the patch layer: Host row + Creator-mode preset override
 index.js              Host half (registers nothing yet; future shared services)
 tools/index.js        preset-scoped half: dsh_plugin_check, dsh_plugin_new
 lib/bundle-check.js   the structural checker (shared by both tools)
-lib/scaffold.js       the template engine (shared by the tool and the CLI)
+lib/generate.js       the generic template engine (recipe → files → rules)
+lib/rules.js          declarative structure checks
+lib/scaffold.js       the bundle scheme (derive hooks + the deep check)
 lib/sandbox.js        the sandbox engine (shared by the tool and the CLI)
-templates/bundle/     the standard plugin template, one file per variant
+templates/bundle/     the bundle scheme: recipe.json, one template per variant
 skills/               skills mounted into Creator mode
 locale/{en,zh}.json   Plugin Manager title / description / detail path
 docs/                 detail document, feature image, and PHILOSOPHY.md

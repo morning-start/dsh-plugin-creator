@@ -14,13 +14,15 @@ Generated from the `dsh-plugin-powerful` bundle template.
 local bundle into the environment you actually work in risks a host that boots with a
 broken composition; a sandbox makes that cost nothing.
 
+With `dsh-plugin-powerful` installed, ask the agent in Creator mode to:
+
 ```
-node scripts/sandbox.mjs create dev --plugin <this directory>
-node scripts/sandbox.mjs open dev
+dsh_sandbox { action: 'create', name: 'dev', plugin: '<this directory>' }
+dsh_sandbox { action: 'start', name: 'dev' }
 ```
 
 Then add a model once in the page (Settings → Models); the sandbox keeps it, so later
-runs are just `open dev`.
+runs are just `start dev`.
 
 Installing into the current environment is a deliberate step, not the default:
 

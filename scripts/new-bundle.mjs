@@ -27,6 +27,7 @@ const VALUE_FLAGS = {
   'tool-name': 'toolName',
   'skill-name': 'skillName',
   'version': 'version',
+  'recipe': 'recipe',
 }
 
 const BOOLEAN_FLAGS = {
@@ -54,6 +55,7 @@ Fields (also accepted as keys in the --config JSON file):
   --tool-name <name>      example tool name (default: rowId with underscores)
   --skill-name <name>     skill directory name (default: rowId)
   --version <semver>      default 0.1.0
+  --recipe <dir>          use another scheme (a directory holding recipe.json + templates)
 
 Flags:
   --with-tool / --no-tool include the example tool (default: with)
