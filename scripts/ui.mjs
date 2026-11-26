@@ -119,8 +119,13 @@ async function main() {
 }
 
 main().then(() => {
-  // The browser stays alive for the next check by design, so its socket and the
-  // fetch keep-alive pool would hold this process open. The work is done.
+  // A browser left running keeps the calling shell alive on Windows (the child
+  // stays inside the command's job object), so the CLI closes it unless asked to
+  // keep it. The tool has no such problem — the Host process is long-lived — and
+  // keeps the browser for reuse.
+  if (!process.argv.includes('--keep') && process.env.DSH_UI_KEEP !== '1') {
+    stopChrome(flag('--port') === undefined ? undefined : Number(flag('--port')))
+  }
   process.exit(process.exitCode ?? 0)
 }).catch((error) => {
   console.error(`ui: ${error instanceof Error ? error.message : String(error)}`)
