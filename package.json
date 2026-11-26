@@ -13,6 +13,7 @@
   },
   "scripts": {
     "new": "node scripts/new-bundle.mjs",
+    "sandbox": "node scripts/sandbox.mjs",
     "check:patch": "node scripts/check-patch.mjs .",
     "check:skills": "node scripts/check-skills.mjs",
     "check:tool": "node scripts/try-tool.mjs ."

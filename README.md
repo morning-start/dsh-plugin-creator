@@ -9,7 +9,7 @@ A plugin-development toolkit for DeepSeek Harness (DSH). Installing it adds tool
 | Tool | `dsh_plugin_check` | Read-only structural check of a bundle directory: manifest fields, the declared `dsh.bundle.patch`, exported locale and icon resources, the entry module, the declared detail document, the `files` whitelist, and relative module names in the patch. Reports pass / warn / fail per check instead of throwing on the first problem. |
 | Tool | `dsh_plugin_new` | Generates a complete plugin package from the standard template: manifest, bundle patch, entry module, locale dictionaries, icon, README, optionally an example tool and a skill. Deterministic, and it runs `dsh_plugin_check` on its own output before returning. |
 | Skill | `dsh-plugin-new` | The interview behind that tool: which fields to ask for, which decisions belong to the user, and what to do with each warning in the report. |
-| Skill | `dsh-plugin-isolated-test` | How to create, test, debug, and publish a plugin inside a `dsh web` instance with its own `DSH_HOME`, profile, and port — including the traps that produce "installed but not working". |
+| Skill | `dsh-plugin-sandbox` | 插件沙盒测试: how to test a plugin in `dsh web` sandboxes — one project can hold several, each with its own `DSH_HOME`, profile, port, and workspace copy, all reused across runs. Includes the traps that produce "installed but not working". |
 
 Everything is mounted inside the Creator-mode preset, so a Standard, PTC, Minimal, or Data-analysis session sees no new tool, no new prompt section, and no new skill.
 
@@ -40,6 +40,33 @@ node scripts/new-bundle.mjs --dry-run ...      # validate and list files, write 
 ```
 
 The generated bundle's patch inserts one Host row and patches no preset, so installing it changes no existing preset's composition. Its README documents the two ways to scope a tool or skill to a single preset instead.
+
+## Sandboxes
+
+Testing a plugin means running a `dsh web` instance that is not the user's desktop app. This package ships the register that makes that repeatable:
+
+```
+<project>/tmp/sandboxes/
+  registry.json            name → home / workspace / profile / port
+  default/
+    home/                  the sandbox's DSH_HOME
+    workspace/             the copy sessions actually run in
+```
+
+One project holds as many sandboxes as it needs — `default` for daily iteration, `clean` for a from-scratch reproduction, `client` for UI states, `rollback` for rehearsing a rollback. All of them are **reused**, never recreated implicitly: the pnpm install, the profile's plugin versions, and the model credentials live in the sandbox home.
+
+```powershell
+node scripts/sandbox.mjs list
+node scripts/sandbox.mjs create default --plugin .
+node scripts/sandbox.mjs open default            # print the command for the user to run
+node scripts/sandbox.mjs open default --run      # start it here and print the URL
+node scripts/sandbox.mjs fix-workspace default
+node scripts/sandbox.mjs status default
+node scripts/sandbox.mjs stop default
+node scripts/sandbox.mjs remove default --yes
+```
+
+**Model credentials stay with the user.** A sandbox starts with only a browser-session record in `.credentials.yaml`; the page then says "choose a model" and nothing sends. `open` prints the two lines the user runs in their own terminal, and they add the model once in Settings → Models. It lands in that sandbox's home and every later `open` reuses it — no script copies the user's credentials around. `list` reports `model: yes / no` by reading the record names, because the file is never empty in this DSH version (~160 bytes of skeleton even with no model).
 
 ## How "Creator mode only" is implemented
 
@@ -74,7 +101,7 @@ skills/               skills mounted into Creator mode
 locale/{en,zh}.json   Plugin Manager title / description / detail path
 docs/                 detail document + feature image
 icon.svg              plugin icon
-scripts/              new-bundle CLI, patch drift check, tool smoke test
+scripts/              new-bundle CLI, sandbox register, patch/skill/tool checks
 ```
 
 ## Install
@@ -140,4 +167,4 @@ dsh --profile iso-powerful --host 127.0.0.1 --port 3099 --no-open
 
 ## Attribution
 
-`skills/dsh-plugin-isolated-test/` is copied from the user's local skill directory (`~/.dsh/skills/dsh-plugin-isolated-test`). Keep it in sync with that source when it changes.
+`skills/dsh-plugin-sandbox/` started as a copy of the user's local skill `~/.dsh/skills/dsh-plugin-isolated-test` and has since been renamed and restructured around the sandbox model (multiple sandboxes per project, reuse, and handing the model setup to the user). Its `references/` still predate that rename — where they say "隔离实例" or `iso-home`, read "sandbox". The copy at `~/.dsh/skills/` was left untouched.
