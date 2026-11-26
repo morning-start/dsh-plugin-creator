@@ -108,6 +108,17 @@ try {
     extra: { 'docs/CONTACT.md': 'mail me at someone@example.com\n' },
   }))
   check('an example-domain email passes', status(exampleEmail, 'privacy:emails') === 'pass')
+  // RFC 2606 reserves these; a project that uses them has leaked nothing.
+  for (const reserved of ['jane.doe@internal.example', 'ops@host.invalid', 'qa@build.test']) {
+    const reservedEmail = await inspectBundle(makeBundle(`reserved-${reserved.split('@')[1]}`, {
+      extra: { 'docs/CONTACT.md': `write to ${reserved}\n` },
+    }))
+    check(`a reserved-TLD email passes (${reserved})`, status(reservedEmail, 'privacy:emails') === 'pass', detail(reservedEmail, 'privacy:emails'))
+  }
+  const realDomain = await inspectBundle(makeBundle('real-domain', {
+    extra: { 'docs/CONTACT.md': 'write to ops@' + 'acme-internal.com' + '\n' },
+  }))
+  check('a real-domain email still warns', status(realDomain, 'privacy:emails') === 'warn', detail(realDomain, 'privacy:emails'))
 
   const machine = await inspectBundle(makeBundle('machine', {
     extra: { 'docs/NOTES.md': `checkout at ${machinePath}\n` },
