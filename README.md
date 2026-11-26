@@ -2,6 +2,14 @@
 
 A plugin-development toolkit for DeepSeek Harness (DSH). Installing it adds tools and skills to **Creator mode (创造模式, the `cordis` preset)** and to nothing else. Removing it takes everything back out.
 
+## What this project is
+
+An agent-era scaffolding toolkit for DSH plugins. A plugin's life runs **构思 → 项目启动 → 规范化开发与检查 → 功能测试 → 集成测试 → 发版**; this package makes the mechanical parts of that cycle stable and fast, and leaves the judgment to skills and conversation.
+
+Where it stands today, stated plainly: **project start** and **functional testing** are in place; **normalized checks**, **integration testing**, and **release** are half-built. The gap list is deliberate — it is the roadmap.
+
+The first design rule: **Creator mode's own tools are this plugin's foundation.** Before adding anything, read what the preset already ships (`dsh --profile <p> --dump-config`, `cordis_inspect_*`) instead of re-implementing it. Installing and enabling is `plugin_manager`'s job; runtime truth comes from Inspect, not from reading source; anything that is judgment belongs in a skill. The full statement — the six-stage capability table with its gaps, the 32 shipped plugins grouped by what each means for the design, and the four design principles — is in [docs/PHILOSOPHY.md](docs/PHILOSOPHY.md) (Chinese).
+
 ## What it adds
 
 | Kind | Name | What it does |
@@ -138,7 +146,7 @@ lib/sandbox.js        the sandbox engine (shared by the tool and the CLI)
 templates/bundle/     the standard plugin template, one file per variant
 skills/               skills mounted into Creator mode
 locale/{en,zh}.json   Plugin Manager title / description / detail path
-docs/                 detail document + feature image
+docs/                 detail document, feature image, and PHILOSOPHY.md
 icon.svg              plugin icon
 scripts/              new-bundle CLI, sandbox register, patch/skill/tool checks
 ```
@@ -200,8 +208,26 @@ dsh --profile iso-powerful --host 127.0.0.1 --port 3099 --no-open
 
 ## Roadmap
 
+Ordered by the lifecycle gaps in [docs/PHILOSOPHY.md](docs/PHILOSOPHY.md) §1 — the three stages that are still half-built.
+
+**规范化开发与检查**
+
+- A verify entry point for generated projects (lint, build, tests) — the template currently ships no `scripts/verify`.
+- Contract checks as a tool: the ones a real plugin project had to hand-write (architecture boundaries, panel/tool/config contracts, doc links).
+- More `dsh_plugin_check` coverage: YAML syntax of the patch (needs a parser), preset declarations, skill frontmatter.
+
+**集成测试**
+
+- Client-side assertions as a tool: slot registration and theme tokens via Inspect, so "the tab is there" stops depending on a human eye.
+- A visual smoke path that does not fake evidence when browser control is unavailable.
+
+**发版**
+
+- A release checker: `files` whitelist, `npm pack --dry-run` surface, version consistency, prepack output, and a rollback rehearsal in the `rollback` sandbox.
+
+**基础设施**
+
 - `scripts/sync-preset.mjs`: regenerate the shipped `preset-cordis` block from the installed DSH, instead of re-copying it by hand.
-- More checks: YAML syntax of the patch (needs a parser), preset declarations, skill frontmatter.
 - Template variants: a client-half bundle (slot registration), and a preset-only bundle that carries its own preset declaration.
 - Optional `/new-plugin` slash command over the same engine, once the `/` menu is confirmed to render in the target host.
 
