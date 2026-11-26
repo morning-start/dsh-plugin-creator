@@ -2,7 +2,7 @@
 
 {{description}}
 
-Generated from the `dsh-plugin-powerful` bundle template.
+Generated from the `dsh-plugin-creator` bundle template.
 
 ## What it adds
 
@@ -12,13 +12,13 @@ Generated from the `dsh-plugin-powerful` bundle template.
 
 `checks.json` ships with this project so the rules it should not have to rediscover are already declared: relative documentation links resolve, the locale files carry the same keys, the entry and patch exist, and every file in the tree is inside `package.json` `files`.
 
-Run them with the `dsh_project_check` tool from `dsh-plugin-powerful`, or with its `scripts/check-project.mjs`:
+Run them with the `dsh_project_check` tool from `dsh-plugin-creator`, or with its `scripts/check-project.mjs`:
 
 ```
-node <dsh-plugin-powerful>/scripts/check-project.mjs .
+node <dsh-plugin-creator>/scripts/check-project.mjs .
 ```
 
-Add your own rules as the project grows — architecture boundaries are the usual next one; the rule reference is `dsh-plugin-powerful`'s `docs/CHECKS.md`.
+Add your own rules as the project grows — architecture boundaries are the usual next one; the rule reference is `dsh-plugin-creator`'s `docs/CHECKS.md`.
 
 ## Install
 
@@ -26,7 +26,7 @@ Add your own rules as the project grows — architecture boundaries are the usua
 local bundle into the environment you actually work in risks a host that boots with a
 broken composition; a sandbox makes that cost nothing.
 
-With `dsh-plugin-powerful` installed, ask the agent in Creator mode to:
+With `dsh-plugin-creator` installed, ask the agent in Creator mode to:
 
 ```
 dsh_sandbox { action: 'create', name: 'dev', plugin: '<this directory>' }
@@ -40,7 +40,7 @@ Installing into the current environment is a deliberate step, not the default:
 
 - publish it and install by registry spec, or
 - the user explicitly decides to link it here, and sets `DSH_ALLOW_LOCAL_PLUGIN_INSTALL=1`
-  for the host before restarting (the install guard in `dsh-plugin-powerful` refuses a
+  for the host before restarting (the install guard in `dsh-plugin-creator` refuses a
   local bundle install otherwise).
 
 A local directory install links this checkout, so later edits are picked up without

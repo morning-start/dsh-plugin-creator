@@ -1,5 +1,5 @@
 /**
- * Host half of `dsh-plugin-powerful`.
+ * Host half of `dsh-plugin-creator`.
  *
  * The capability half lives in `./tools`, which the bundle patch mounts inside
  * the Creator-mode preset (`preset-cordis`) only. This row exists so the bundle

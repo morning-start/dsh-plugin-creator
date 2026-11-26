@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "description": "Project checks for {{packageName}}. Run them with the dsh_project_check tool, or with scripts/check-project.mjs from dsh-plugin-powerful. Rules are data; the rule reference is that package's docs/CHECKS.md.",
+  "description": "Project checks for {{packageName}}. Run them with the dsh_project_check tool, or with scripts/check-project.mjs from dsh-plugin-creator. Rules are data; the rule reference is that package's docs/CHECKS.md.",
   "rules": [
     {
       "id": "docs:links",

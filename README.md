@@ -1,4 +1,4 @@
-# dsh-plugin-powerful
+# dsh-plugin-creator
 
 A plugin-development toolkit for DeepSeek Harness (DSH). Installing it extends **Creator mode (创造模式, the `cordis` preset)** and nothing else; removing it takes everything back out.
 
@@ -122,7 +122,7 @@ Limits, stated plainly: it does not cover a human typing `dsh plugin add` in the
 
 The bundle patch (`cordis.patch.yml`) overrides the shipped `preset-cordis` row and appends two rows to its plugin list:
 
-- `powerful-tools` → `dsh-plugin-powerful/tools`, which registers `dsh_plugin_check` on the preset's context;
+- `powerful-tools` → `dsh-plugin-creator/tools`, which registers `dsh_plugin_check` on the preset's context;
 - `powerful-skills` → a second `@deepseek-ai/dsh-skill-filesystem` provider with `includeDefaultRoots: false` and `customSkillDirs` pointing at this package's `skills/` directory.
 
 The patch also inserts one Host row, `powerful-host`, which registers nothing today and exists so the bundle has a stable identity row in Plugin Manager.
@@ -170,7 +170,7 @@ plugin_manager  action: install_bundle  target: <path to this checkout>
 or from a shell in the profile:
 
 ```
-dsh plugin --profile desktop add link:E:/Workplace/extension/dsh-plugin-powerful
+dsh plugin --profile desktop add link:<this checkout>
 ```
 
 A local directory install links the checkout, so edits under `tools/` and `skills/` are picked up without reinstalling — but a changed module still needs a restart to load a fresh module generation, and a skill edit is picked up live by the skill provider.

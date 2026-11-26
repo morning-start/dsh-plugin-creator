@@ -113,7 +113,7 @@ function verdict(exec) {
 
 const sandboxHome = join(repo, 'tmp', 'guard-sandbox', 'home')
 mkdirSync(sandboxHome, { recursive: true })
-writeFileSync(join(repo, 'tmp', 'guard-sandbox', 'sandbox.json'), JSON.stringify({ marker: 'dsh-plugin-powerful/sandbox' }))
+writeFileSync(join(repo, 'tmp', 'guard-sandbox', 'sandbox.json'), JSON.stringify({ marker: 'dsh-plugin-creator/sandbox' }))
 
 const cases = [
   ['plugin_manager install_bundle link:', { name: 'plugin_manager', arguments: { action: 'install_bundle', target: 'link:E:/Workplace/x' } }, 'deny'],

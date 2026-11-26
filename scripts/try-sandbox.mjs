@@ -190,6 +190,23 @@ try {
   const removed = sandboxes.remove('clean', { confirmed: true })
   check('confirmed remove deletes the folder', removed.confirmed === true && !existsSync(join(project, 'tmp', 'sandboxes', 'clean')))
   check('register drops the entry', sandboxes.list().sandboxes.every(item => item.name !== 'clean'))
+
+  // A rename or a manual delete leaves a register entry with no folder, and the
+  // cleanup path has to work anyway.
+  const orphan = await sandboxes.create('orphan', {})
+  created.push('orphan')
+  rmSync(join(project, 'tmp', 'sandboxes', 'orphan'), { recursive: true, force: true })
+  const stale = sandboxes.remove('orphan', { confirmed: true })
+  check('remove works when the folder is already gone', stale.confirmed === true && stale.stale === true)
+  check('the stale entry is gone', sandboxes.list().sandboxes.every(item => item.name !== 'orphan'))
+  check('removing an unknown sandbox still throws', (() => {
+    try {
+      sandboxes.remove('never-existed', { confirmed: true })
+      return false
+    } catch {
+      return true
+    }
+  })())
   created.length = 0
 
   console.log('\nlauncher resolution')

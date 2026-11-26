@@ -1,4 +1,4 @@
-# dsh-plugin-powerful — bundle patch layer.
+# dsh-plugin-creator — bundle patch layer.
 #
 # This layer does exactly two things:
 #
@@ -22,7 +22,7 @@
 
 - insert:
     - id: powerful-host
-      name: 'dsh-plugin-powerful'
+      name: 'dsh-plugin-creator'
 
 # --- shipped preset-cordis (verbatim, re-indented) ---
 - id: preset-cordis
@@ -163,11 +163,11 @@
         disabled: !!js "!ctx.get('profileContext')"
       # --- end shipped ---
 
-      # --- dsh-plugin-powerful additions (Creator mode only) ---
+      # --- dsh-plugin-creator additions (Creator mode only) ---
 
       # Tools: `./tools` registers dsh_plugin_check on this preset's context.
       - id: powerful-tools
-        name: 'dsh-plugin-powerful/tools'
+        name: 'dsh-plugin-creator/tools'
 
       # Skills: a second filesystem provider, isolated to this package's own
       # `skills/` directory. `includeDefaultRoots: false` keeps it from
@@ -178,4 +178,4 @@
           providerName: powerful
           includeDefaultRoots: false
           customSkillDirs:
-            - !!js process.getBuiltinModule('node:path').join(process.getBuiltinModule('node:path').dirname(process.getBuiltinModule('node:module').createRequire(baseUrl).resolve('dsh-plugin-powerful/package.json')), 'skills')
+            - !!js process.getBuiltinModule('node:path').join(process.getBuiltinModule('node:path').dirname(process.getBuiltinModule('node:module').createRequire(baseUrl).resolve('dsh-plugin-creator/package.json')), 'skills')

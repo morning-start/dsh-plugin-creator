@@ -73,7 +73,7 @@ description: "插件沙盒测试：用 dsh web（不是桌面端）在沙盒里�
 - 当前环境崩在插件上是**你自己修的坑**：一个坏 patch 会让宿主带伤启动，用户下次开会话就撞上；
 - 沙盒里同样的失败只花掉一次重启。
 
-`dsh-plugin-powerful` 自带的 guard 会**直接拒绝**这两种调用（`plugin_manager` 的 `install_bundle` 本地 target、
+`dsh-plugin-creator` 自带的 guard 会**直接拒绝**这两种调用（`plugin_manager` 的 `install_bundle` 本地 target、
 `pwsh`/`bash`/`terminal` 里的 `dsh plugin … add link:` 或本地路径），除非：
 
 - 这个宿主**本身就是沙盒**（`DSH_HOME` 指向带 `sandbox.json` 标记的沙盒，或路径在 `tmp/sandboxes/` 下）——沙盒里随便装；

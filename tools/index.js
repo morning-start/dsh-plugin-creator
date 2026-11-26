@@ -1,5 +1,5 @@
 /**
- * Preset-scoped half of `dsh-plugin-powerful`.
+ * Preset-scoped half of `dsh-plugin-creator`.
  *
  * The bundle patch mounts this row inside the Creator-mode preset only, so every
  * tool registered here is visible in Creator mode and nowhere else. Unloading the
@@ -31,13 +31,13 @@ export const inject = ['tools']
  * @param {import('@deepseek-ai/cordis').Context} ctx - preset-scoped context.
  */
 export function apply(ctx) {
-  ctx.effect(() => ctx.tools.register(pluginCheck), 'dsh-plugin-powerful/dsh_plugin_check')
-  ctx.effect(() => ctx.tools.register(projectCheck), 'dsh-plugin-powerful/dsh_project_check')
-  ctx.effect(() => ctx.tools.register(pluginNew(() => sessionDirectory(ctx))), 'dsh-plugin-powerful/dsh_plugin_new')
-  ctx.effect(() => ctx.tools.register(sandboxTool(() => sessionDirectory(ctx))), 'dsh-plugin-powerful/dsh_sandbox')
-  ctx.effect(() => ctx.tools.register(releaseTool), 'dsh-plugin-powerful/dsh_plugin_release')
-  ctx.effect(() => ctx.tools.register(uiTool(() => sessionDirectory(ctx))), 'dsh-plugin-powerful/dsh_plugin_ui')
-  ctx.effect(() => ctx.tools.guard(localInstallGuard), 'dsh-plugin-powerful/no-local-install')
+  ctx.effect(() => ctx.tools.register(pluginCheck), 'dsh-plugin-creator/dsh_plugin_check')
+  ctx.effect(() => ctx.tools.register(projectCheck), 'dsh-plugin-creator/dsh_project_check')
+  ctx.effect(() => ctx.tools.register(pluginNew(() => sessionDirectory(ctx))), 'dsh-plugin-creator/dsh_plugin_new')
+  ctx.effect(() => ctx.tools.register(sandboxTool(() => sessionDirectory(ctx))), 'dsh-plugin-creator/dsh_sandbox')
+  ctx.effect(() => ctx.tools.register(releaseTool), 'dsh-plugin-creator/dsh_plugin_release')
+  ctx.effect(() => ctx.tools.register(uiTool(() => sessionDirectory(ctx))), 'dsh-plugin-creator/dsh_plugin_ui')
+  ctx.effect(() => ctx.tools.guard(localInstallGuard), 'dsh-plugin-creator/no-local-install')
 }
 
 /* ------------------------------------------------------------------ *
@@ -55,7 +55,7 @@ export function apply(ctx) {
  * ------------------------------------------------------------------ */
 
 /** Marker written by scripts/sandbox.mjs into every sandbox folder. */
-const SANDBOX_MARKER = 'dsh-plugin-powerful/sandbox'
+const SANDBOX_MARKER = 'dsh-plugin-creator/sandbox'
 
 /** Explicit, user-owned override; the agent must ask before using it. */
 const OVERRIDE_ENV = 'DSH_ALLOW_LOCAL_PLUGIN_INSTALL'

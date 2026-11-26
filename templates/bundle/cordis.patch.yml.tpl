@@ -5,7 +5,7 @@
 #
 # To expose this plugin's tools in exactly one preset instead of everywhere,
 # override that preset's declaration in this file and append a row naming this
-# package. dsh-plugin-powerful's cordis.patch.yml is a worked example: it
+# package. dsh-plugin-creator's cordis.patch.yml is a worked example: it
 # restates the shipped preset list and appends its own rows.
 
 - insert:
