@@ -73,6 +73,24 @@ try {
   })
   check('an incompatible DSH fails the check', tooNew.ok === false)
 
+  // A fixture nested in this repository must not be judged by this repository's
+  // tag: that is how a test package at 1.0.0 failed on a v0.1.3 build.
+  const nested = join(work, 'nested')
+  mkdirSync(nested, { recursive: true })
+  writeFileSync(join(nested, 'package.json'), JSON.stringify({
+    name: 'dsh-plugin-nested',
+    version: '1.0.0',
+    description: 'A fixture that lives inside this repository rather than at its root.',
+    exports: { '.': './index.js' },
+    dsh: { bundle: { patch: './cordis.patch.yml' } },
+  }, null, 2))
+  writeFileSync(join(nested, 'index.js'), 'export default {}\n')
+  writeFileSync(join(nested, 'cordis.patch.yml'), 'plugins: []\n')
+  const nestedReport = await inspectRelease(nested)
+  const nestedTag = nestedReport.checks.find(item => item.id === 'release:tag')
+  check('a nested package is not judged by the outer tag', nestedTag?.status === 'pass', nestedTag?.message)
+  check('and it says why', /not the repository root/.test(nestedTag?.message ?? ''), nestedTag?.message)
+
   console.log('\nreadiness failures')
   const bad = join(work, 'bad')
   mkdirSync(bad, { recursive: true })
