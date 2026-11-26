@@ -67,3 +67,20 @@
 - 没在第三方真实插件（如 `dsh-myteam`）上跑过 `--apply`；fixture 都是构造的。
 - `templates/adopt/` 没建：五条动作都是代码生成，没引入新模板。
 - `--json` 输出没被任何测试断言（只手工看过）。
+
+## 6. 在真实项目上跑一遍（dsh-myteam）
+
+- Saw: 批准了「拿真实项目跑 dry-run」。`dsh-myteam` 根目录没有 `package.json`——插件在 `plugin/` 子目录里（monorepo 形状）。
+- Decided: 对 `dsh-myteam/plugin` 出计划；先只读，不写。
+- Did: `node scripts/adopt.mjs E:\Workplace\extension\dsh-myteam\plugin`。
+- Evidence: `bundle: 18 pass, 1 warn, 0 fail`；计划四条——`add-repository`（`git+https://github.com/morning-start/dsh-myteam.git`，与 `git remote get-url origin` 一致）、`add-ci-workflow`、`append-gitignore`（只加 `tmp/`，`node_modules/` 已在）、`add-market-json`（草稿是一句真实描述）；**`add-checks-json` 正确地没有出现**——它已有自己的 `checks.json`；`manual patch:drift` 一条；工作区 20 个未提交路径 → 正确拒绝写入。
+- Outcome: done（关键证据：它没有动别人的 checks.json）
+
+## 7. 修真实项目暴露的缺陷：非包目录抛 ENOENT
+
+- Saw: 指向 `dsh-myteam` 根目录时抛原始 `ENOENT ... package.json`，栈直接打给用户。
+- Decided: 换成明确拒绝，并提示 monorepo 的插件通常在子目录。
+- Did: `auditProject` 前置 `existsSync`；CLI 捕获后打印一行并 exit 1；加 2 项测试。
+- Evidence: `node scripts/adopt.mjs E:\Workplace\extension\dsh-myteam` → `adopt: not a plugin package: ... has no package.json (a monorepo's plugin usually lives in a subdirectory such as plugin/)`；`try-adopt` → `ok a directory without package.json is refused clearly` / `ok the message names the monorepo case`。
+- 死路: 第一次写的正则被模板转义成 `/no package\\\\.json/`，匹配不到；改成单反斜杠后通过。
+- Outcome: done

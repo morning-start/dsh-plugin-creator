@@ -183,6 +183,19 @@ try {
   check('no repository action without a remote', loosePlan.actions.every(action => action.id !== 'add-repository'))
   rmSync(loose, { recursive: true, force: true })
 
+  console.log('\nnot a plugin package')
+  const notPackage = join(work, 'not-a-package')
+  mkdirSync(notPackage, { recursive: true })
+  writeFileSync(join(notPackage, 'README.md'), '# not a package\n')
+  let refusal = ''
+  try {
+    await auditProject(notPackage)
+  } catch (error) {
+    refusal = error.message
+  }
+  check('a directory without package.json is refused clearly', /no package\.json/.test(refusal), refusal)
+  check('the message names the monorepo case', /subdirectory/.test(refusal), refusal)
+
   console.log('\nthis repository')
   const own = await auditProject(repo)
   check('this repository passes its own bundle check', own.bundle.ok === true, JSON.stringify(own.bundle.checks.filter(item => item.status === 'fail')))

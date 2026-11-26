@@ -23,7 +23,13 @@ const value = name => {
 const positional = args.filter((arg, index) => !arg.startsWith('--') && !(index > 0 && args[index - 1].startsWith('--')))
 
 const directory = resolve(positional[0] ?? '.')
-const audit = await auditProject(directory)
+let audit
+try {
+  audit = await auditProject(directory)
+} catch (error) {
+  console.error(`adopt: ${error.message}`)
+  process.exit(1)
+}
 const plan = await planAdoption(directory, audit)
 
 if (has('--json')) {
