@@ -89,7 +89,7 @@ jobs:
           fi
           npm publish --provenance --access public
           if [ -f scripts/release.mjs ]; then
-            node scripts/release.mjs verify . --version "${GITHUB_REF_NAME#v}"
+            node scripts/release.mjs verify . --version "${GITHUB_REF_NAME#v}" --wait 300
           fi
 
       - name: Create the GitHub Release

@@ -93,9 +93,12 @@ async function main() {
     case 'verify': {
       const manifest = JSON.parse(readFileSync(join(directory, 'package.json'), 'utf8'))
       const version = flag('--version') ?? manifest.version
+      const wait = flag('--wait')
       const result = await verifyPublished(manifest.name, version, {
         tag: flag('--tag'),
         registry: flag('--registry'),
+        attempts: wait === undefined ? 1 : Math.max(1, Math.ceil(Number(wait) / 15)),
+        intervalMs: 15_000,
       })
       for (const finding of result.findings) {
         console.log(`${finding.status === 'pass' ? 'ok  ' : 'FAIL'} ${finding.id}: ${finding.message}`)
