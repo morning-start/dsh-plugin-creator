@@ -84,10 +84,11 @@ README 讲能力，这个文件讲**具体是哪个工具、什么参数、边�
 | `path` | 项目目录（绝对路径） |
 | `config` | 指定另一个检查文件，默认在项目根找 |
 | `only` | 只跑这些规则 id（或类型），修某一组时用 |
+| `update` | 重新生成契约文件（`contract-drift` 规则）而不是只报漂移。会写文件，确认 diff 符合预期时才传 |
 
-规则类型：`doc-links`（相对 markdown 链接可解析）、`locale-parity`（多语言 key 一致）、`import-boundary`（分层依赖方向 / 宿主模块 / 外部包）、`no-console`，以及通用的 `file-exists` / `file-absent` / `files-listed` / `placeholder-free` / `json-field` / `frontmatter-name`。
+规则类型：`doc-links`（相对 markdown 链接可解析）、`locale-parity`（多语言 key 一致）、`import-boundary`（分层依赖方向 / 宿主模块 / 外部包）、`no-console`、`contract-drift`（生成物与生成器对账），以及通用的 `file-exists` / `file-absent` / `files-listed` / `placeholder-free` / `json-field` / `frontmatter-name`。
 
-**边界**：不做 lint、不跑测试、不生成契约文件；分层必须显式写，不替你推断。规则语义与「别乱加豁免」的教训见 [`CHECKS.md`](CHECKS.md)。
+**边界**：不做 lint、不跑测试、不替你写生成器；分层必须显式写，不替你推断。规则语义与「别乱加豁免」的教训见 [`CHECKS.md`](CHECKS.md)。
 
 ### `dsh_plugin_ui`
 

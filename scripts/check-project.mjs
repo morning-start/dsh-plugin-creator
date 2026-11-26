@@ -3,10 +3,10 @@
  * CLI front over `lib/checks.js` — the same engine as the `dsh_project_check`
  * tool.
  *
- *   node scripts/check-project.mjs [dir] [--config <file>] [--only id,id]
+ *   node scripts/check-project.mjs [dir] [--config <file>] [--only id,id] [--update]
  *
  * The project declares its rules in `checks.json`; this runs them and exits 1 on
- * any failure. Rule types are documented in docs/CHECKS.md.
+ * any failure. --update regenerates contract files instead of only reporting\n * them. Rule types are documented in docs/CHECKS.md.
  */
 
 import { resolve } from 'node:path'
@@ -25,6 +25,7 @@ async function main() {
   const result = await runProjectChecks(directory, {
     config: flag('--config'),
     only: only === undefined ? undefined : only.split(',').map(item => item.trim()).filter(item => item.length > 0),
+    update: process.argv.includes('--update'),
   })
 
   console.log(`${result.target}`)

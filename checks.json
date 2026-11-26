@@ -13,6 +13,12 @@
       "files": ["locale/en.json", "locale/zh.json"]
     },
     {
+      "id": "contract:tools",
+      "type": "contract-drift",
+      "file": "docs/contracts/tools.json",
+      "generator": "node scripts/gen-tools-contract.mjs"
+    },
+    {
       "id": "bundle:entry",
       "type": "file-exists",
       "path": "index.js"

@@ -1,0 +1,581 @@
+{
+  "generatedBy": "scripts/gen-tools-contract.mjs",
+  "note": "Generated from tools/index.js. Do not edit by hand; run the generator and commit the diff.",
+  "count": 6,
+  "tools": [
+    {
+      "name": "dsh_plugin_check",
+      "description": "Check a DSH bundle directory for the structural problems that make installation, activation, or display fail: manifest fields, the declared bundle patch, exported locale and icon resources, the entry module, declared detail documents, and the packaged file whitelist. Read-only; it never changes the directory.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string",
+            "description": "Absolute path to the bundle package directory (the folder holding package.json)."
+          }
+        },
+        "required": [
+          "path"
+        ]
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "ok": {
+            "type": "boolean",
+            "description": "True when no check failed."
+          },
+          "target": {
+            "type": "string"
+          },
+          "summary": {
+            "type": "object",
+            "properties": {
+              "pass": {
+                "type": "integer"
+              },
+              "warn": {
+                "type": "integer"
+              },
+              "fail": {
+                "type": "integer"
+              }
+            },
+            "required": [
+              "pass",
+              "warn",
+              "fail"
+            ]
+          },
+          "checks": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "status": {
+                  "type": "string",
+                  "enum": [
+                    "pass",
+                    "warn",
+                    "fail"
+                  ]
+                },
+                "message": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "id",
+                "status",
+                "message"
+              ]
+            }
+          }
+        },
+        "required": [
+          "ok",
+          "target",
+          "summary",
+          "checks"
+        ]
+      }
+    },
+    {
+      "name": "dsh_plugin_new",
+      "description": "Create a new DSH plugin bundle from the standard template: package manifest, bundle patch, entry module, locale dictionaries, icon, README, and optionally an example tool and a skill. Deterministic — the same arguments always produce the same files. It runs dsh_plugin_check on the result and returns that report, so fix every reported failure before installing.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "packageName": {
+            "type": "string",
+            "description": "Lowercase npm package name, such as \"dsh-plugin-my-thing\" or \"@scope/my-thing\". The preset row id is derived from it when rowId is omitted."
+          },
+          "title": {
+            "type": "string",
+            "description": "The name users see in Plugin Manager. Short, sentence case."
+          },
+          "description": {
+            "type": "string",
+            "description": "What the plugin does and how to trigger it, in the user's language. Plugin Manager shows it verbatim."
+          },
+          "dest": {
+            "type": "string",
+            "description": "Directory to create. Defaults to a new folder named after the package inside the session working directory. Refuses a non-empty directory unless force is true."
+          },
+          "titleZh": {
+            "type": "string",
+            "description": "Chinese title, when the user works in Chinese. Adds locale/zh.json."
+          },
+          "descriptionZh": {
+            "type": "string",
+            "description": "Chinese description. Adds locale/zh.json."
+          },
+          "rowId": {
+            "type": "string",
+            "description": "Loader row id, lowercase letters, digits, and hyphens. Defaults to the package name without the \"dsh-plugin-\" prefix and any scope."
+          },
+          "toolName": {
+            "type": "string",
+            "description": "Name of the example tool, lowercase with underscores. Defaults to rowId with hyphens turned into underscores."
+          },
+          "skillName": {
+            "type": "string",
+            "description": "Skill directory name, when withSkill is true. Defaults to rowId."
+          },
+          "version": {
+            "type": "string",
+            "description": "Package version. Defaults to 0.1.0."
+          },
+          "withTool": {
+            "type": "boolean",
+            "description": "Include and register an example tool (default true). Set false for a plugin that only wires services or a skill."
+          },
+          "withSkill": {
+            "type": "boolean",
+            "description": "Include a SKILL.md and a skill-provider row (default false). The skill is then listed in every preset, not only Creator mode."
+          },
+          "force": {
+            "type": "boolean",
+            "description": "Write into a directory that already has files, overwriting only the files this template generates."
+          },
+          "recipe": {
+            "type": "string",
+            "description": "Directory of another scheme to generate from (a folder holding recipe.json plus its templates). Defaults to the built-in bundle scheme."
+          },
+          "configPath": {
+            "type": "string",
+            "description": "Read any of the fields above from a JSON file instead of the arguments; arguments that are also given win. Use it when a plan already exists on disk."
+          }
+        },
+        "required": [
+          "packageName",
+          "title",
+          "description"
+        ]
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "dest": {
+            "type": "string"
+          },
+          "files": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "warnings": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "checks": {
+            "type": "object",
+            "properties": {
+              "ok": {
+                "type": "boolean"
+              },
+              "pass": {
+                "type": "integer"
+              },
+              "warn": {
+                "type": "integer"
+              },
+              "fail": {
+                "type": "integer"
+              },
+              "findings": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            },
+            "required": [
+              "ok",
+              "pass",
+              "warn",
+              "fail",
+              "findings"
+            ]
+          }
+        },
+        "required": [
+          "dest",
+          "files",
+          "warnings",
+          "checks"
+        ]
+      }
+    },
+    {
+      "name": "dsh_plugin_release",
+      "description": "Prepare a plugin package for release. `check` reports what the packer would ship, whether the running DSH satisfies the package's engines/peer requirement, and what blocks a registry publish. `pack` writes the tarball. `rehearse` packs, installs it into a sandbox, and reads the composed config back — the only check that proves it installs and activates, plus the rollback command. It never publishes.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": [
+              "check",
+              "pack",
+              "rehearse"
+            ],
+            "description": "check readiness; pack the tarball; or rehearse installing it in a sandbox."
+          },
+          "path": {
+            "type": "string",
+            "description": "The package directory (the folder holding package.json). Absolute."
+          },
+          "outDir": {
+            "type": "string",
+            "description": "For pack: where to write the tarball. Defaults to <path>/tmp/release."
+          },
+          "sandbox": {
+            "type": "string",
+            "description": "For rehearse: sandbox name to install into. Defaults to \"rollback\"."
+          },
+          "dshVersion": {
+            "type": "string",
+            "description": "For check: the DSH version to test compatibility against. Defaults to `dsh --version`."
+          },
+          "project": {
+            "type": "string",
+            "description": "For rehearse: project root holding tmp/sandboxes. Defaults to the package directory."
+          }
+        },
+        "required": [
+          "action",
+          "path"
+        ]
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "action": {
+            "type": "string"
+          },
+          "ok": {
+            "type": "boolean"
+          },
+          "summary": {
+            "type": "string"
+          },
+          "data": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        },
+        "required": [
+          "action",
+          "ok",
+          "summary",
+          "data"
+        ]
+      }
+    },
+    {
+      "name": "dsh_plugin_ui",
+      "description": "Look at and assert on a running page through a headless browser (Chrome DevTools Protocol): `shot` saves a screenshot, `assert` checks selectors / text / expressions / console errors, `eval` returns a value from the page, `close` stops the browser. Point it at a sandbox (name + path) and it resolves the URL and session token for you, or give a URL directly. The browser is reused between calls; `close` is the way to stop it.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": [
+              "shot",
+              "assert",
+              "eval",
+              "close"
+            ],
+            "description": "screenshot the page; run assertions; evaluate an expression; stop the browser."
+          },
+          "sandbox": {
+            "type": "string",
+            "description": "Sandbox name to take the URL from. Requires the sandbox to be running."
+          },
+          "path": {
+            "type": "string",
+            "description": "For sandbox targets: the page path to open, e.g. \"/\" or \"/settings\". Defaults to \"/\"."
+          },
+          "url": {
+            "type": "string",
+            "description": "A full URL to open instead of a sandbox. If it has no token, one is added when a sandbox is named."
+          },
+          "project": {
+            "type": "string",
+            "description": "Project root holding tmp/sandboxes. Defaults to the session working directory."
+          },
+          "out": {
+            "type": "string",
+            "description": "For shot: where to write the PNG. Defaults to <project>/tmp/ui/<action>-<time>.png."
+          },
+          "size": {
+            "type": "string",
+            "description": "Viewport, e.g. \"1440x900\" or \"390x844\" for a phone width."
+          },
+          "assertions": {
+            "type": "array",
+            "description": "For assert: objects with one of selector / text / expression (+ equals) / noConsoleErrors / noNetworkFailures, and an optional id.",
+            "items": {
+              "type": "object",
+              "additionalProperties": true
+            }
+          },
+          "expression": {
+            "type": "string",
+            "description": "For eval: a JavaScript expression evaluated in the page."
+          },
+          "click": {
+            "type": "string",
+            "description": "Click this selector before the action (real mouse events, not a synthetic click)."
+          },
+          "type": {
+            "type": "object",
+            "description": "Focus a selector and insert text, e.g. {\"selector\": \"#input\", \"text\": \"hello\"}.",
+            "additionalProperties": true
+          },
+          "settleMs": {
+            "type": "integer",
+            "description": "How long to wait after load before acting. Defaults to 1200."
+          },
+          "port": {
+            "type": "integer",
+            "description": "CDP port. Defaults to 9222; a second port lets two browsers coexist."
+          }
+        },
+        "required": [
+          "action"
+        ]
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "action": {
+            "type": "string"
+          },
+          "ok": {
+            "type": "boolean"
+          },
+          "summary": {
+            "type": "string"
+          },
+          "data": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        },
+        "required": [
+          "action",
+          "ok",
+          "summary",
+          "data"
+        ]
+      }
+    },
+    {
+      "name": "dsh_project_check",
+      "description": "Run the checks a project declares in checks.json (or dsh-checks.json). Rule types: doc-links (relative markdown links resolve), locale-parity (locale files carry the same keys), import-boundary (a layered source tree must not import outward, reach for host modules from an inner layer, or pull in packages where it should not), no-console, file-exists / file-absent / files-listed / placeholder-free / json-field / frontmatter-name. Read-only; every rule reports pass/warn/fail instead of stopping at the first problem.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string",
+            "description": "Project directory holding the checks file. Absolute."
+          },
+          "config": {
+            "type": "string",
+            "description": "An explicit checks file, instead of checks.json at the project root."
+          },
+          "only": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Run only these rule ids (or types). Useful while fixing one group."
+          },
+          "update": {
+            "type": "boolean",
+            "description": "Regenerate contract files (contract-drift rules) instead of only reporting drift. Writes files; pass it only when the diff is expected."
+          }
+        },
+        "required": [
+          "path"
+        ]
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          },
+          "target": {
+            "type": "string"
+          },
+          "source": {
+            "type": "string",
+            "description": "The checks file that was used."
+          },
+          "summary": {
+            "type": "object",
+            "properties": {
+              "pass": {
+                "type": "integer"
+              },
+              "warn": {
+                "type": "integer"
+              },
+              "fail": {
+                "type": "integer"
+              }
+            },
+            "required": [
+              "pass",
+              "warn",
+              "fail"
+            ]
+          },
+          "checks": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "status": {
+                  "type": "string",
+                  "enum": [
+                    "pass",
+                    "warn",
+                    "fail"
+                  ]
+                },
+                "message": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "id",
+                "status",
+                "message"
+              ]
+            }
+          }
+        },
+        "required": [
+          "ok",
+          "target",
+          "source",
+          "summary",
+          "checks"
+        ]
+      }
+    },
+    {
+      "name": "dsh_sandbox",
+      "description": "Manage isolated dsh web sandboxes for testing a plugin: one project can hold several (daily iteration, a clean reproduction, client UI states), each with its own DSH_HOME, profile, port, and workspace copy. Sandboxes are reused across runs — the installed plugin versions and the model credentials the user adds once stay in the sandbox home. `start` launches one and returns its URL so you can probe it immediately; `open` only prints the command for the user, for when they need to add a model themselves.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": [
+              "list",
+              "create",
+              "start",
+              "open",
+              "status",
+              "fix-workspace",
+              "http",
+              "seed",
+              "stop",
+              "remove"
+            ],
+            "description": "list the sandboxes; create a new one; start it; print the command for the user; probe it; point its workspace at the sandbox copy; request a path from it; copy data into it; stop it; remove it."
+          },
+          "name": {
+            "type": "string",
+            "description": "Sandbox name, lowercase letters, digits, and hyphens. Required for every action except list."
+          },
+          "project": {
+            "type": "string",
+            "description": "Project root whose tmp/sandboxes holds the sandboxes. Defaults to the session working directory."
+          },
+          "plugin": {
+            "type": "string",
+            "description": "For create: the plugin directory to install (link:). Defaults to the project root."
+          },
+          "waitMs": {
+            "type": "integer",
+            "description": "For start: how long to wait for the URL before failing. Defaults to 45000."
+          },
+          "path": {
+            "type": "string",
+            "description": "For http: the path to request, e.g. \"/api/panel/summary\". The session token is added for you."
+          },
+          "method": {
+            "type": "string",
+            "description": "For http: HTTP method. Defaults to GET."
+          },
+          "body": {
+            "type": "string",
+            "description": "For http: request body, sent as JSON."
+          },
+          "entries": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "For seed: entry names inside the source DSH_HOME to copy in, e.g. [\"myteam\"] or [\"skills\"]. The source is only read."
+          },
+          "from": {
+            "type": "string",
+            "description": "For seed: the DSH_HOME to copy from. Defaults to ~/.dsh."
+          },
+          "force": {
+            "type": "boolean",
+            "description": "For seed: overwrite existing entries. For stop: kill a listener that is not the recorded process."
+          },
+          "confirm": {
+            "type": "boolean",
+            "description": "For remove: must be true. Removing deletes the model credentials added in that sandbox."
+          }
+        },
+        "required": [
+          "action"
+        ]
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "action": {
+            "type": "string"
+          },
+          "ok": {
+            "type": "boolean"
+          },
+          "summary": {
+            "type": "string",
+            "description": "What happened, in the terms the user sees."
+          },
+          "data": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        },
+        "required": [
+          "action",
+          "ok",
+          "summary",
+          "data"
+        ]
+      }
+    }
+  ]
+}

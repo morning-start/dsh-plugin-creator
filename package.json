@@ -24,6 +24,7 @@
     "check:ui": "node scripts/try-ui.mjs",
     "check:project": "node scripts/check-project.mjs .",
     "check:checks": "node scripts/try-checks.mjs",
+    "contract": "node scripts/gen-tools-contract.mjs --write",
     "check:tool": "node scripts/try-tool.mjs ."
   },
   "files": [

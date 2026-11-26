@@ -3,7 +3,7 @@
 //
 //   node scripts/try-checks.mjs
 
-import { mkdirSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { loadChecks, runProjectChecks } from '../lib/checks.js'
@@ -113,6 +113,57 @@ try {
   check('console in a watched layer fails', noisy.checks[0].status === 'fail', noisy.checks[0].message)
   const scoped = await runRules(work, [{ id: 'console', type: 'no-console', root: 'src', layers: ['domain'] }])
   check('a layer outside the watch list is ignored', scoped.checks[0].status === 'pass', scoped.checks[0].message)
+
+  console.log('\ncontract drift')
+  const contractDir = join(work, 'contract')
+  mkdirSync(join(contractDir, 'docs'), { recursive: true })
+  mkdirSync(join(contractDir, 'tools'), { recursive: true })
+  writeFileSync(join(contractDir, 'tools', 'gen.mjs'), [
+    "import { readFileSync } from 'node:fs'",
+    "const source = JSON.parse(readFileSync(new URL('./source.json', import.meta.url), 'utf8'))",
+    "process.stdout.write(`# contract\\n${source.items.map(item => `- ${item}`).join('\\n')}\\n`)",
+  ].join('\n'))
+  writeFileSync(join(contractDir, 'tools', 'source.json'), JSON.stringify({ items: ['alpha', 'beta'] }))
+  const contractRule = [{
+    id: 'contract',
+    type: 'contract-drift',
+    file: 'docs/contract.md',
+    generator: 'node tools/gen.mjs',
+  }]
+
+  const missing = await runRules(contractDir, contractRule)
+  check('a missing contract fails', missing.checks[0].status === 'fail')
+  check('it says how to produce one', /does not exist/.test(missing.checks[0].message), missing.checks[0].message)
+
+  const updated = await runRules(contractDir, contractRule, {}, { update: true })
+  check('update writes the file', updated.checks[0].status === 'pass', updated.checks[0].message)
+  check('the generated content is right', readFileSync(join(contractDir, 'docs', 'contract.md'), 'utf8').includes('- alpha'))
+
+  const inSync = await runRules(contractDir, contractRule)
+  check('an in-sync contract passes', inSync.checks[0].status === 'pass', inSync.checks[0].message)
+
+  writeFileSync(join(contractDir, 'tools', 'source.json'), JSON.stringify({ items: ['alpha', 'beta', 'gamma'] }))
+  const drifted = await runRules(contractDir, contractRule)
+  check('a changed source is drift', drifted.checks[0].status === 'fail')
+  check('the first differing line is named', /first difference at line/.test(drifted.checks[0].message), drifted.checks[0].message)
+
+  const repaired = await runRules(contractDir, contractRule, {}, { update: true })
+  check('update repairs the drift', repaired.checks[0].status === 'pass' && readFileSync(join(contractDir, 'docs', 'contract.md'), 'utf8').includes('gamma'))
+
+  writeFileSync(join(contractDir, 'tools', 'source.json'), JSON.stringify({ items: [] }))
+  writeFileSync(join(contractDir, 'docs', 'contract.md'), '# contract\nstale\n')
+  const crlf = await runRules(contractDir, contractRule, {}, { update: true })
+  check('line endings do not count as drift', crlf.checks[0].status === 'pass')
+
+  writeFileSync(join(contractDir, 'tools', 'gen-bad.mjs'), 'process.exit(3)')
+  const brokenGenerator = await runRules(contractDir, [{
+    id: 'contract-bad',
+    type: 'contract-drift',
+    file: 'docs/contract.md',
+    generator: 'node tools/gen-bad.mjs',
+  }])
+  check('a failing generator fails the rule', brokenGenerator.checks[0].status === 'fail')
+  check('the exit code is reported', /failed \(3\)/.test(brokenGenerator.checks[0].message), brokenGenerator.checks[0].message)
 
   console.log('\nchecks file')
   await expectError('a missing checks file is an error', () => loadChecks(work), /no checks file/)

@@ -174,6 +174,10 @@ const projectCheck = {
         items: { type: 'string' },
         description: 'Run only these rule ids (or types). Useful while fixing one group.',
       },
+      update: {
+        type: 'boolean',
+        description: 'Regenerate contract files (contract-drift rules) instead of only reporting drift. Writes files; pass it only when the diff is expected.',
+      },
     },
     required: ['path'],
   },
@@ -214,6 +218,7 @@ const projectCheck = {
     return await runProjectChecks(String(args.path), {
       config: args.config === undefined ? undefined : String(args.config),
       only: Array.isArray(args.only) ? args.only.map(String) : undefined,
+      update: args.update === true,
     })
   },
 }

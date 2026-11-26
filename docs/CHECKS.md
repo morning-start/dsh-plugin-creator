@@ -31,6 +31,8 @@ node scripts/check-project.mjs --config ci/checks.json
   "rules": [
     { "id": "docs:links", "type": "doc-links", "exclude": ["\\.dsh-memory/"] },
     { "id": "locale:parity", "type": "locale-parity", "files": ["locale/en.json", "locale/zh.json"] },
+    { "id": "contract:tools", "type": "contract-drift",
+      "file": "docs/contracts/tools.json", "generator": "node scripts/gen-tools-contract.mjs" },
     { "id": "arch:layers", "type": "import-boundary", "root": "src",
       "layers": {
         "domain": ["application", "infrastructure"],
@@ -89,6 +91,38 @@ markdown 里的**相对链接**必须解析得到。跳过 `http(s)://`、`mailt
 
 `file-exists`、`file-absent`、`files-listed`、`placeholder-free`、`json-field`、`frontmatter-name`——语义见 [`SCHEMES.md`](SCHEMES.md)，同一套实现、同一套 pass/warn/fail。
 
+### `contract-drift`
+
+生成物与源码对账。**手写的契约文档一定会漂移**；让它由代码生成、由检查守住，改动就会出现在 diff 里，而不是悄悄过期。
+
+```jsonc
+{
+  "id": "contract:tools",
+  "type": "contract-drift",
+  "file": "docs/contracts/tools.json",              // 提交进仓库的生成物
+  "generator": "node scripts/gen-tools-contract.mjs",
+  "mode": "stdout"                                   // 默认 stdout；另有 file
+}
+```
+
+| `mode` | 生成器怎么工作 | 检查怎么做 |
+|---|---|---|
+| `stdout`（默认） | 把内容打到标准输出 | 比对 stdout 与文件；不一致就报第一条差异行 |
+| `file` | 自己写目标文件（`--check` 那种风格的生成器） | 跑之前记指纹、跑完再记一次，变了就是漂移 |
+
+两种模式都支持 `--update` / `{ update: true }`：**不是只报告，而是重新生成**。所以「生成」和「验证」是同一份规则的两个动作，不用维护两套逻辑。
+
+判据与细节：
+
+- 比较前统一换行符与行尾空白，所以 CRLF/LF 差异不算漂移；
+- 漂移报告给出**第一条差异的行号与两侧内容**，不用自己 diff；
+- 生成器退出码非 0 → 规则 fail 并带上退出码与 stderr；
+- 生成器是**项目自己的脚本**，`checks.json` 因此能执行命令——把它当 `package.json` 的 scripts 一样对待：只放你自己的生成器。
+
+> 为什么值得做：myteam 项目的工具面契约是 `gen-tool-contract.mjs` 生成的，`--check` 守着它。手写那版曾经落后于代码，导致文档上写着不存在的工具。生成 + 对账之后，改工具必然改契约，否则 CI 红。
+
+本仓库也用自己的规则检查自己的工具面：`scripts/gen-tools-contract.mjs` 把六个工具的名字、说明、参数 schema、输出 schema 生成为 `docs/contracts/tools.json`，`checks.json` 里的 `contract:tools` 守着它。
+
 ## 本仓库自己的 checks.json
 
 这个仓库也用自己的规则检查自己（dogfood）：
@@ -106,5 +140,5 @@ markdown 里的**相对链接**必须解析得到。跳过 `http(s)://`、`mailt
 
 - **不做 lint**：语法与风格交给真正的 linter，这里只查「结构关系」；
 - **不跑测试**：`check-project` 是静态的，跑测试是另一件事；
-- **不生成契约文件**：契约的**生成**（把面板/工具/配置的 schema 导出成文档）不在这个能力里；要验契约有没有漂移，先把它导出成文件，再用 `json-field` / `placeholder-free` 这类规则对账。
+- **不替你写生成器**：`contract-drift` 只负责跑你的生成器并比对结果；把 schema 导出成文档这一步属于项目自己（本仓库的例子是 `scripts/gen-tools-contract.mjs`）。
 - **不猜你的分层**：`layers` 必须显式写出来，写错就是规则写错，不会替你推断。
