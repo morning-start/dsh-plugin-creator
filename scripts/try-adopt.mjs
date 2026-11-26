@@ -132,6 +132,28 @@ try {
   check('the added field is the only new key', Object.keys(JSON.parse(formattedAfter)).length === Object.keys(JSON.parse(formattedBefore)).length + 1)
   check('the result still parses and keeps the version', JSON.parse(formattedAfter).version === '1.0.0')
 
+  console.log('\na project that allows only listed files')
+  const strict = join(work, 'strict')
+  makeBare(strict)
+  // Start green: the allowlist covers what the project actually has, and nothing else.
+  const strictManifest = JSON.parse(readFileSync(join(strict, 'package.json'), 'utf8'))
+  strictManifest.files = ['index.js', 'cordis.patch.yml']
+  writeFileSync(join(strict, 'package.json'), JSON.stringify(strictManifest, null, 2) + '\n')
+  writeFileSync(join(strict, 'checks.json'), JSON.stringify({
+    version: 1,
+    rules: [{ id: 'bundle:files-listed', type: 'files-listed', manifest: 'package.json', exclude: ['.gitignore', 'checks.json'] }],
+  }, null, 2))
+  git(strict, 'add', '-A')
+  git(strict, 'commit', '-q', '-m', 'strict files list')
+  const strictPlan = await planAdoption(strict)
+  check('market.json is not planned when files-listed would reject it', strictPlan.actions.every(action => action.id !== 'add-market-json'), JSON.stringify(ids(strictPlan)))
+  check('it becomes a decision with the reason', strictPlan.decisions.some(item => item.id === 'market:files-listed'), JSON.stringify(strictPlan.decisions))
+  await applyAdoption(strict, strictPlan)
+  const { runRules } = await import('../lib/rules.js')
+  const strictRules = JSON.parse(readFileSync(join(strict, 'checks.json'), 'utf8')).rules
+  const strictResult = await runRules(strict, strictRules)
+  check('the project own rules still pass after adopt', strictResult.ok === true, JSON.stringify(strictResult.checks.filter(item => item.status !== 'pass')))
+
   console.log('\nnot overwriting')
   const custom = join(work, 'custom')
   makeBare(custom)

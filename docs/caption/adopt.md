@@ -84,3 +84,26 @@
 - Evidence: `node scripts/adopt.mjs E:\Workplace\extension\dsh-myteam` → `adopt: not a plugin package: ... has no package.json (a monorepo's plugin usually lives in a subdirectory such as plugin/)`；`try-adopt` → `ok a directory without package.json is refused clearly` / `ok the message names the monorepo case`。
 - 死路: 第一次写的正则被模板转义成 `/no package\\\\.json/`，匹配不到；改成单反斜杠后通过。
 - Outcome: done
+
+## 9. 用真实项目的副本验 --apply（不碰别人的项目）
+
+- Saw: 未验证清单里挂着「没真正 --apply 过」。myteam 工作区是脏的，而按纪律不能改别人的项目。
+- Decided: 拿 myteam 的**一次性 git 克隆**当靶子——不是它的工作区，验完即删。这样既真实（monorepo、真实 checks.json、18 项 bundle 检查）又不碰任何人。
+- Did: `git clone` 到 `tmp/adopt-e2e/myteam`；重置行尾、把 origin 指回 GitHub（本地克隆的 remote 是路径，推不出 repository 字段）；`adopt --apply`。
+- Evidence: 三条动作落地（repository / CI / .gitignore）；`package.json` 的 diff 是**插入**（`+6 -1`，只多 repository 块），不是重排；`git status` 只显示 `M plugin/.gitignore`、`M plugin/package.json`、`?? plugin/.github/`——**checks.json 没被碰**。
+- Outcome: dead end（第一次）→ 见下一条
+
+## 10. 副本抓到的真 bug：规范化把项目弄红了
+
+- Saw: 副本跑自己的规则 → `6 pass, 0 warn, 1 fail: bundle:files-listed: not covered by package.json "files": market.json`。给 `checks.json` 定的原则（不能把项目变红）没用在 `market.json` 上。
+- Decided: 加 pre-flight——写根文件之前，先看项目自己的 `files-listed` 规则会不会拒它；会拒就降级成 decide 并说明理由，不写。
+- Did: 加 `rootFileConflict()`；先用在 `add-market-json`，跑测试发现 **CI workflow 同样会红**（`.github/workflows/release.yml` 也没在白名单里），于是同样用在 `add-ci-workflow`。
+- Evidence: 副本上 `decide market:files-listed ...`；apply 后副本自己的规则 **7 pass, 0 warn, 0 fail**；`try-adopt` 新增 3 项（不计划 market.json / 变成带理由的 decision / 之后项目规则仍绿）。
+- 死路: 第一版测试夹具的 `files` 为空，项目**在 adopt 之前就是红的**，断言没意义；改成先让夹具绿（files 覆盖它实际有的文件）。
+- Outcome: done
+
+## 未验证（更新）
+
+- `dsh_plugin_adopt` 工具入口仍未做。
+- 副本只验了 myteam 一个项目；没验「项目已有 market.json 但内容过期」这类路径。
+- 真实 owner 在自己项目里跑 `--apply` 之后 `git diff` 的观感，没有第三方反馈。
