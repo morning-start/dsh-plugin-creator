@@ -7,6 +7,7 @@ import { mkdirSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { createGithubRelease, inspectRelease, packSurface, parseVersion, publishRelease, satisfies, verifyPublished } from '../lib/release.js'
+import { shipRelease } from '../lib/ship.js'
 
 const repo = fileURLToPath(new URL('..', import.meta.url))
 const work = join(repo, 'tmp', 'test-release')
@@ -100,6 +101,48 @@ try {
   check('the surface includes the manifest', surface.files.includes('package.json'), JSON.stringify(surface.files.slice(0, 5)))
   check('the surface excludes tmp', surface.files.every(file => !file.startsWith('tmp/')), JSON.stringify(surface.files.filter(file => file.startsWith('tmp/'))))
   check('the surface has a size', typeof surface.totalSize === 'number')
+
+
+  console.log('\nshipping')
+  const shipDir = join(work, 'ship')
+  mkdirSync(shipDir, { recursive: true })
+  writeFileSync(join(shipDir, 'package.json'), JSON.stringify({ name: 'dsh-plugin-ship', version: '2.0.0' }))
+  const okReadiness = { ok: true, checks: [{ id: 'release:manifest', status: 'pass', message: '' }] }
+  const badReadiness = { ok: false, checks: [{ id: 'release:patch', status: 'fail', message: 'no patch' }] }
+  const tarball = join(work, 'ship', 'ship-2.0.0.tgz')
+  writeFileSync(tarball, 'x')
+  const order = []
+  const deps = {
+    readiness: () => okReadiness,
+    packer: () => { order.push('pack'); return { tarball } },
+    publisher: () => { order.push('publish'); return { ok: true, version: '2.0.0', output: '+ dsh-plugin-ship@2.0.0' } },
+    releaseCreator: () => { order.push('release'); return { ok: true, url: 'https://github.com/o/r/releases/tag/v2.0.0' } },
+    verifier: async () => { order.push('verify'); return { ok: true, findings: [] } },
+  }
+
+  const shipped = await shipRelease(shipDir, { ...deps, confirmed: true })
+  check('a clean ship succeeds', shipped.ok === true, JSON.stringify(shipped.steps))
+  check('the order is check, pack, publish, release, verify', JSON.stringify(order) === JSON.stringify(['pack', 'publish', 'release', 'verify']), JSON.stringify(order))
+  check('the release URL is reported', shipped.url?.includes('/releases/tag/v2.0.0') === true)
+  check('the tarball is reported', shipped.tarball === tarball)
+
+  const blocked = await shipRelease(shipDir, { ...deps, readiness: () => badReadiness })
+  check('a failed readiness stops before packing', blocked.ok === false && blocked.failedAt === 'check')
+  check('it names the failed checks', blocked.failedChecks?.includes('release:patch') === true)
+
+  const publishFailed = await shipRelease(shipDir, { ...deps, publisher: () => ({ ok: false, output: 'npm error 402' }) })
+  check('a failed publish stops before the release', publishFailed.ok === false && publishFailed.failedAt === 'publish')
+  check('the release never ran', publishFailed.steps.some(step => step.step === 'release') === false)
+
+  const slow = await shipRelease(shipDir, { ...deps, verifier: async () => ({ ok: false, findings: [{ id: 'npm:tarball', status: 'fail', message: '404' }] }) })
+  check('a slow registry does not undo the release', slow.ok === true && slow.installable === false)
+  check('the verify step is marked advisory', slow.steps.find(step => step.step === 'verify')?.advisory === true)
+
+  const noNpm = await shipRelease(shipDir, { ...deps, skipNpm: true })
+  check('--skip-npm skips publishing', noNpm.ok === true && noNpm.steps.find(step => step.step === 'publish')?.detail.includes('skipped'))
+
+  const dryShip = await shipRelease(shipDir, { ...deps, dryRun: true, publisher: () => ({ ok: true, dryRun: true, output: '' }), releaseCreator: () => ({ ok: true, dryRun: true, command: 'gh release create v2.0.0' }) })
+  check('a dry run reports both steps as dry', dryShip.ok === true && dryShip.steps.find(step => step.step === 'publish')?.detail.includes('dry run'))
 
   console.log('\npublishing')
   const publishable = join(work, 'publishable')

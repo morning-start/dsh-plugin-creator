@@ -58,14 +58,32 @@ node scripts/release.mjs rehearse . --sandbox rollback
 
 ## 4. 发布（代码已经在 GitHub 上之后）
 
-发版的后半段都在推送之后发生，所以它们是命令，不是一次性手工操作：
+发版的后半段都在推送之后发生，所以它是一条命令：
 
 ```powershell
-node scripts/release.mjs publish . --dry-run     # 先看它要发什么
-node scripts/release.mjs publish . --yes         # 真发；不可撤销，所以必须显式 --yes
-node scripts/release.mjs verify .                # 等 registry 真的能装
-node scripts/release.mjs gh-release . --tarball tmp/release/<name>.tgz   # 建 Release 并挂 tarball
-node scripts/release.mjs market --write data/plugins/<owner>__<repo>.yml # 市场条目
+node scripts/release.mjs ship . --dry-run    # 看它要做什么
+node scripts/release.mjs ship . --yes        # 真发；不可撤销，所以必须显式 --yes
+```
+
+顺序是**在真实 registry 上撞出来的**，不是设计出来的：
+
+```
+check -> pack -> publish -> release -> verify(advisory)
+```
+
+- **release 在 verify 之前**：0.1.1 和 0.1.2 都是发布成功、registry 还没传播时被自己的
+  verify 判红，结果 GitHub Release 根本没建。产物不该被缓存速度挡住。
+- **verify 是 advisory**：等 10 分钟，不可见只提示不失败。真要确认可安装，`npm i` 或
+  `dsh plugin add` 一次比任何等待都准。
+- **任何一步失败就停**，后面的步骤不会跑，也不会留下半个发布。
+
+要单步执行或排查时，五条命令仍然在：
+
+```powershell
+node scripts/release.mjs publish . --yes      # 只发 npm
+node scripts/release.mjs verify . --wait 600  # 只验传播
+node scripts/release.mjs gh-release . --tarball tmp/release/<name>.tgz
+node scripts/release.mjs market --write data/plugins/<owner>__<repo>.yml
 ```
 
 **发哪个工具**：有 `npm` 用 `npm publish`；没有就用 DSH 运行时自带的 pnpm（很多安装就是这样）。两者都在 `resolvePublisher()` 里选，选不到就明确报错，而不是跑一半才失败。

@@ -14,7 +14,8 @@ README 讲能力，这个文件讲**具体是哪个工具、什么参数、边�
 | 沙盒测试（建 / 起 / 探 / 停 / 清） | `dsh_sandbox` + 技能 `dsh-plugin-sandbox`（负责判断） | `scripts/sandbox.mjs` |
 | 看页面 / 断言 / 真实点击 | `dsh_plugin_ui` | `scripts/ui.mjs` |
 | 发版（就绪检查 / 打包 / 沙盒演练） | `dsh_plugin_release` | `scripts/release.mjs` |
-| 发布之后：npm 发布 / 传播核对 / GitHub Release / 市场条目 | —（只走 CLI，因为都在推送之后） | `scripts/release.mjs publish\|verify\|gh-release\|market` |
+| 发布之后：一条命令跑完 check → pack → publish → release → verify | — | `scripts/release.mjs ship` |
+| 发布之后：单步 npm 发布 / 传播核对 / GitHub Release / 市场条目 | —（只走 CLI，因为都在推送之后） | `scripts/release.mjs publish\|verify\|gh-release\|market` |
 | 按方案生成任意结构化内容 | `dsh_plugin_new` 的 `recipe` 参数 | `scripts/new-bundle.mjs --recipe` |
 | 结构规范检查（方案自带规则） | `dsh_plugin_check` 的规则段 + `lib/rules.js` | `scripts/try-generate.mjs` |
 

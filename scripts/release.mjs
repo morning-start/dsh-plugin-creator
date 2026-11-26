@@ -15,6 +15,7 @@
 import { readFileSync, writeFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import { createGithubRelease, inspectRelease, packRelease, publishRelease, rehearseRelease, verifyPublished } from '../lib/release.js'
+import { shipRelease } from '../lib/ship.js'
 
 function flag(name) {
   const index = process.argv.indexOf(name)
@@ -70,6 +71,33 @@ async function main() {
       console.log(`\n  rollback: ${result.rollback}`)
       console.log(`  publish:  ${result.publish}`)
       if (!result.ok) process.exitCode = 1
+      return
+    }
+
+    case 'ship': {
+      const result = await shipRelease(directory, {
+        dryRun: process.argv.includes('--dry-run'),
+        confirmed: process.argv.includes('--yes'),
+        skipNpm: process.argv.includes('--skip-npm'),
+        draft: process.argv.includes('--draft'),
+        tag: flag('--tag'),
+        gitTag: flag('--git-tag'),
+        waitSeconds: flag('--wait') === undefined ? 300 : Number(flag('--wait')),
+      })
+      for (const step of result.steps) {
+        const mark = step.ok ? (step.advisory ? 'ok* ' : 'ok  ') : 'FAIL'
+        console.log(`${mark} ${step.step.padEnd(8)} ${step.detail}`)
+      }
+      console.log('')
+      if (!result.ok) {
+        console.log(`stopped at ${result.failedAt}. Nothing after it ran.`)
+        process.exitCode = 1
+      } else {
+        console.log(`shipped ${result.version} as ${result.gitTag}`)
+        if (result.url !== undefined) console.log(`  release: ${result.url}`)
+        if (result.installable !== true) console.log('  registry: not visible yet (advisory, the release is already cut)')
+        console.log('  * advisory: a slow registry cache does not undo a release')
+      }
       return
     }
 
@@ -156,6 +184,8 @@ async function main() {
     case undefined:
       console.log(`Release checks for a DSH plugin package.
 
+  node scripts/release.mjs ship [dir] [--yes] [--dry-run] [--skip-npm] [--draft] [--wait 300]
+                                                       check -> pack -> publish -> release -> verify (advisory)
   node scripts/release.mjs check [dir]                  what ships, and does DSH accept it
   node scripts/release.mjs pack [dir] [--out <dir>]     write the tarball
   node scripts/release.mjs rehearse [dir] [--sandbox rollback] [--project <dir>]
