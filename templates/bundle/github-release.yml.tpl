@@ -27,11 +27,13 @@ jobs:
     env:
       NPM_TOKEN: $\{{ secrets.NPM_TOKEN }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
-          node-version: 22
+          # The LTS alias keeps this file from going stale every October; the
+          # package has no dependencies, so any supported Node runs the checks.
+          node-version: lts/*
 
       - name: The tag must match package.json
         run: |
