@@ -56,14 +56,25 @@ node scripts/release.mjs rehearse . --sandbox rollback
 
 沙盒是复用的，所以第二次演练只花几秒。演练完记得把沙盒切回 `link:`（如果你还要继续改源码），否则沙盒里跑的是冻结的 tarball。
 
-## 4. 发布
+## 4. 发布（代码已经在 GitHub 上之后）
+
+发版的后半段都在推送之后发生，所以它们是命令，不是一次性手工操作：
 
 ```powershell
-npm publish            # registry 形态；private 必须先去掉
-# 或直接把 tmp/release/*.tgz 分发出去
+node scripts/release.mjs publish . --dry-run     # 先看它要发什么
+node scripts/release.mjs publish . --yes         # 真发；不可撤销，所以必须显式 --yes
+node scripts/release.mjs verify .                # 等 registry 真的能装
+node scripts/release.mjs gh-release . --tarball tmp/release/<name>.tgz   # 建 Release 并挂 tarball
+node scripts/release.mjs market --write data/plugins/<owner>__<repo>.yml # 市场条目
 ```
 
-**这一步不由工具代劳**：`npm publish` 不可撤销，账号与可见性（`publishConfig.access`）是人的决定。`dsh_plugin_release` 只报「能不能发、该跑什么」。
+**发哪个工具**：有 `npm` 用 `npm publish`；没有就用 DSH 运行时自带的 pnpm（很多安装就是这样）。两者都在 `resolvePublisher()` 里选，选不到就明确报错，而不是跑一半才失败。
+
+**`verify` 不是可选项。** `npm publish` 打印 `+ name@version` 就返回了，那一刻包往往还装不上：有时 registry 里只有一个 `0.0.0-stage` 占位，有时 tarball 几分钟内 404。判断标准是产物不是提示——`dist-tags.latest` 等于你的版本**且** tarball 能下载。国内镜像可能更久，所以真实判据还是 `dsh plugin --profile <p> add <name>` 装一遍。
+
+**`gh-release` 的资产名不带版本号。** 市场的 `tarball:` 字段常用 `releases/latest/download/`，那里 tag 在请求时解析、**文件名照字面取**——资产名里带版本号，你下一次发版它就成了 404。所以命令会把 tarball 复制成 `<name>.tgz` 再上传；要带版本号就钉住 tag（`--tag v1.2.0` + 版本化文件名）。
+
+`private: true` 会直接挡住 `publish`，这是有意的：本地 bundle 分发不需要 registry。
 
 ## 5. 装到真实 profile
 
@@ -100,9 +111,9 @@ dsh plugin --profile <profile> add <name>@<上一版版本>
 条目**由包生成，不手写**：
 
 ```powershell
-node scripts/market-entry.mjs            # 打印条目
-node scripts/market-entry.mjs --check    # 按发布规则校验 + 问 gh 要仓库状态
-node scripts/market-entry.mjs --write data/plugins/<owner>__<repo>.yml
+node scripts/release.mjs market                          # 打印条目
+node scripts/release.mjs market --write data/plugins/<owner>__<repo>.yml
+node scripts/market-entry.mjs --check                    # 按规则校验 + 问 gh 要仓库状态
 ```
 
 `url` 和 `name` 来自 `git remote`，所以不可能指向别的仓库；一句话描述来自项目根的 `market.json`（写清楚这一行是**声明**，会被维护者对着代码核对）。

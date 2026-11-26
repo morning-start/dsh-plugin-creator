@@ -12,8 +12,9 @@
  * composed config back. Neither publishes: `npm publish` is the user's call.
  */
 
+import { readFileSync, writeFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
-import { inspectRelease, packRelease, rehearseRelease } from '../lib/release.js'
+import { createGithubRelease, inspectRelease, packRelease, publishRelease, rehearseRelease, verifyPublished } from '../lib/release.js'
 
 function flag(name) {
   const index = process.argv.indexOf(name)
@@ -72,6 +73,80 @@ async function main() {
       return
     }
 
+    case 'publish': {
+      const result = publishRelease(directory, {
+        tag: flag('--tag'),
+        access: flag('--access'),
+        otp: flag('--otp'),
+        dryRun: process.argv.includes('--dry-run'),
+        confirmed: process.argv.includes('--yes'),
+      })
+      console.log(`${result.dryRun ? 'Dry run' : 'Published'} with ${result.kind}: ${result.output.split('\n').slice(-4).join('\n')}`)
+      if (!result.ok) process.exitCode = 1
+      else if (!result.dryRun) {
+        console.log(`\nNext: node scripts/release.mjs verify . --version ${result.version}`)
+        console.log('      node scripts/release.mjs gh-release . --tarball tmp/release/<name>.tgz')
+      }
+      return
+    }
+
+    case 'verify': {
+      const manifest = JSON.parse(readFileSync(join(directory, 'package.json'), 'utf8'))
+      const version = flag('--version') ?? manifest.version
+      const result = await verifyPublished(manifest.name, version, {
+        tag: flag('--tag'),
+        registry: flag('--registry'),
+      })
+      for (const finding of result.findings) {
+        console.log(`${finding.status === 'pass' ? 'ok  ' : 'FAIL'} ${finding.id}: ${finding.message}`)
+      }
+      if (!result.ok) {
+        console.log('\nNot installable yet. A fresh name can land as a placeholder and attach the real version later; re-run in a few minutes.')
+        process.exitCode = 1
+      }
+      return
+    }
+
+    case 'gh-release': {
+      const result = createGithubRelease(directory, {
+        tag: flag('--tag'),
+        tarball: flag('--tarball'),
+        notesFile: flag('--notes'),
+        draft: process.argv.includes('--draft'),
+        dryRun: process.argv.includes('--dry-run'),
+      })
+      if (result.dryRun) console.log(result.command)
+      else {
+        console.log(`${result.ok ? 'Created' : 'FAILED'}: ${result.url ?? result.command}`)
+        if (!result.ok) console.log(result.output)
+      }
+      if (!result.ok) process.exitCode = 1
+      return
+    }
+
+    case 'market': {
+      const { buildEntry, renderEntry, validateEntry } = await import('../lib/market.js')
+      const { entry, source } = buildEntry(directory)
+      const validation = validateEntry(entry)
+      const yaml = renderEntry(entry)
+      const target = flag('--write')
+      if (target === undefined) {
+        process.stdout.write(yaml)
+        return
+      }
+      const path = resolve(target)
+      writeFileSync(path, yaml, 'utf8')
+      console.log(`wrote ${path}`)
+      console.log(`source: ${source === undefined ? 'derived' : source.replace(directory, '.')}`)
+      if (!validation.ok) {
+        for (const check of validation.checks.filter(item => item.status !== 'pass')) {
+          console.log(`${check.status === 'warn' ? 'warn' : 'FAIL'} ${check.id}: ${check.message}`)
+        }
+        process.exitCode = 1
+      }
+      return
+    }
+
     case 'help':
     case '--help':
     case '-h':
@@ -82,8 +157,16 @@ async function main() {
   node scripts/release.mjs pack [dir] [--out <dir>]     write the tarball
   node scripts/release.mjs rehearse [dir] [--sandbox rollback] [--project <dir>]
                                                        install it in a sandbox and read the config back
+  node scripts/release.mjs publish [dir] [--tag latest] [--dry-run] [--yes]
+                                                       publish to the registry (npm, else the DSH runtime's pnpm)
+  node scripts/release.mjs verify [dir] [--version <v>] [--tag latest] [--registry <url>]
+                                                       is the published version actually installable yet
+  node scripts/release.mjs gh-release [dir] [--tag v<v>] [--tarball <file>] [--draft] [--notes <file>] [--dry-run]
+                                                       create the GitHub Release and attach the tarball
+  node scripts/release.mjs market [--write <file>]      print or write the plugin-market entry
 
-check accepts --dsh-version <v> to test against a version other than the running one.`)
+check accepts --dsh-version <v> to test against a version other than the running one.
+publish requires --yes: it is irreversible. Everything else is safe to re-run.`)
       return
 
     default:

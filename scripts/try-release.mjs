@@ -6,7 +6,7 @@
 import { mkdirSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { inspectRelease, packSurface, parseVersion, satisfies } from '../lib/release.js'
+import { createGithubRelease, inspectRelease, packSurface, parseVersion, publishRelease, satisfies, verifyPublished } from '../lib/release.js'
 
 const repo = fileURLToPath(new URL('..', import.meta.url))
 const work = join(repo, 'tmp', 'test-release')
@@ -100,6 +100,94 @@ try {
   check('the surface includes the manifest', surface.files.includes('package.json'), JSON.stringify(surface.files.slice(0, 5)))
   check('the surface excludes tmp', surface.files.every(file => !file.startsWith('tmp/')), JSON.stringify(surface.files.filter(file => file.startsWith('tmp/'))))
   check('the surface has a size', typeof surface.totalSize === 'number')
+
+  console.log('\npublishing')
+  const publishable = join(work, 'publishable')
+  mkdirSync(publishable, { recursive: true })
+  writeFileSync(join(publishable, 'package.json'), JSON.stringify({ name: 'dsh-plugin-publishable', version: '1.2.3' }))
+  const stub = join(work, 'stub-publisher.mjs')
+  writeFileSync(stub, 'console.log("+ dsh-plugin-publishable@1.2.3")\n')
+  const fakePublisher = { kind: 'npm', command: `node "${stub}"` }
+
+  const dry = publishRelease(publishable, { publisher: fakePublisher, dryRun: true })
+  check('a dry run does not need confirmation', dry.ok === true && dry.dryRun === true)
+  check('a dry run still reports the version', dry.version === '1.2.3')
+
+  let refused = ''
+  try {
+    publishRelease(publishable, { publisher: fakePublisher })
+  } catch (error) {
+    refused = error.message
+  }
+  check('a real publish refuses without confirmation', /irreversible/.test(refused), refused)
+
+  const published = publishRelease(publishable, { publisher: fakePublisher, confirmed: true })
+  check('a confirmed publish runs the publisher', published.ok === true && published.output.includes('@1.2.3'), published.output)
+
+  const privateDir = join(work, 'private')
+  mkdirSync(privateDir, { recursive: true })
+  writeFileSync(join(privateDir, 'package.json'), JSON.stringify({ name: 'x', version: '1.0.0', private: true }))
+  let privateRefusal = ''
+  try {
+    publishRelease(privateDir, { publisher: fakePublisher, confirmed: true })
+  } catch (error) {
+    privateRefusal = error.message
+  }
+  check('private: true blocks publishing', /private/.test(privateRefusal), privateRefusal)
+
+  console.log('\nregistry propagation')
+  const { createServer } = await import('node:http')
+  let stale = false
+  const server = createServer((request, response) => {
+    if (request.url?.startsWith('/dsh-plugin-fixture')) {
+      const tarball = `http://127.0.0.1:${server.address().port}/fixture-1.0.0.tgz`
+      response.writeHead(200, { 'content-type': 'application/json' })
+      response.end(JSON.stringify({
+        'dist-tags': { latest: stale ? '0.0.0-stage' : '1.0.0' },
+        versions: { '1.0.0': { dist: { tarball } } },
+      }))
+      return
+    }
+    if (request.url === '/fixture-1.0.0.tgz') {
+      response.writeHead(stale ? 404 : 200)
+      response.end('')
+      return
+    }
+    response.writeHead(404)
+    response.end('')
+  })
+  await new Promise(done => server.listen(0, '127.0.0.1', done))
+  const registry = `http://127.0.0.1:${server.address().port}`
+
+  const settled = await verifyPublished('dsh-plugin-fixture', '1.0.0', { registry })
+  check('a settled publish passes', settled.ok === true, JSON.stringify(settled.findings))
+  check('the dist-tag is checked', settled.findings.find(item => item.id === 'npm:dist-tag')?.status === 'pass')
+  check('the tarball is checked', settled.findings.find(item => item.id === 'npm:tarball')?.status === 'pass')
+
+  stale = true
+  const staleResult = await verifyPublished('dsh-plugin-fixture', '1.0.0', { registry })
+  check('a placeholder dist-tag fails', staleResult.ok === false)
+  check('it says what the tag points at', /0\.0\.0-stage/.test(staleResult.findings.find(item => item.id === 'npm:dist-tag')?.message ?? ''))
+  check('an unreachable tarball fails', staleResult.findings.find(item => item.id === 'npm:tarball')?.status === 'fail')
+  server.close()
+
+  const missing = await verifyPublished('dsh-plugin-fixture', '1.0.0', { registry, timeoutMs: 1500 })
+  check('an unreachable registry fails instead of hanging', missing.ok === false)
+
+  console.log('\ngithub release')
+  const packed = join(work, 'release', 'dsh-plugin-publishable-1.2.3.tgz')
+  mkdirSync(join(work, 'release'), { recursive: true })
+  writeFileSync(packed, 'not really a tarball')
+  const ghPlan = createGithubRelease(publishable, { tarball: packed, dryRun: true })
+  check('a dry run prints the command', ghPlan.command.startsWith('gh release create v1.2.3'), ghPlan.command)
+  check('the asset name carries no version', ghPlan.asset.endsWith('dsh-plugin-publishable.tgz'), ghPlan.asset)
+  let ghRefusal = ''
+  try {
+    createGithubRelease(publishable, { tarball: join(work, 'nope.tgz'), dryRun: true })
+  } catch (error) {
+    ghRefusal = error.message
+  }
+  check('a missing tarball is refused', /pack/.test(ghRefusal), ghRefusal)
 } finally {
   rmSync(work, { recursive: true, force: true })
 }
