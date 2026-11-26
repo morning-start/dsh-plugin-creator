@@ -118,7 +118,14 @@ try {
 
   const stopped = sandboxes.stop('dev')
   check('stop killed a process', stopped.stopped.length > 0)
-  const afterStop = await sandboxes.status('dev')
+  // SIGKILL is asynchronous: the process is gone before the kernel has finished
+  // tearing down its listening socket, and on a busy CI runner that gap is long
+  // enough to observe. Poll instead of asserting on the instant after the kill.
+  let afterStop = await sandboxes.status('dev')
+  for (let attempt = 0; attempt < 50 && afterStop.running; attempt += 1) {
+    await new Promise(done => setTimeout(done, 100))
+    afterStop = await sandboxes.status('dev')
+  }
   check('status sees it stopped', afterStop.running === false)
 
   console.log('\nstop refuses a stranger on the port')
