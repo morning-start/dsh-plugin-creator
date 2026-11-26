@@ -88,9 +88,6 @@ jobs:
             exit 0
           fi
           npm publish --provenance --access public
-          if [ -f scripts/release.mjs ]; then
-            node scripts/release.mjs verify . --version "${GITHUB_REF_NAME#v}" --wait 300
-          fi
 
       - name: Create the GitHub Release
         env:
@@ -99,3 +96,13 @@ jobs:
           gh release create "$GITHUB_REF_NAME" "$ASSET" \
             --title "$GITHUB_REF_NAME" \
             --generate-notes
+
+      # After the release on purpose: the registry can take longer than any
+      # reasonable wait to serve a brand-new version, and that lag must not hold
+      # up the tarball people install from.
+      - name: Registry propagation (advisory)
+        if: env.NPM_TOKEN != '' && hashFiles('scripts/release.mjs') != ''
+        continue-on-error: true
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: node scripts/release.mjs verify . --version "${GITHUB_REF_NAME#v}" --wait 600
