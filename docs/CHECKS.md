@@ -87,6 +87,20 @@ markdown 里的**相对链接**必须解析得到。跳过 `http(s)://`、`mailt
 
 指定的层里不许有 `console.log/info/debug`。比 `import-boundary` 单独拆出来，是因为它常常只对一部分层生效，而且改起来很快。
 
+### `session-message-identity`
+
+交给会话的消息必须带 id。扫 `root` 下的源码，找四种写法：消息字面量没有 `id`、事件 `append` 的载荷不是构造器、构造器实参里没有 `id`、`id` 是空串。
+
+这是**唯一一个「写的时候全对、读的时候全错」**的结构错误：写入路径（`Agent.followup / steer / inject / send`）不检查 `message.id`，加载路径（`Session.fromRestore()` → `assertMessageEventShape`）强制要求，所以一条没有 id 的消息会让人在下次打开时**整段会话打不开**，报 `... lacks an identified message`。详见 [`errors/session-message-identity.md`](../errors/session-message-identity.md)。
+
+| 参数 | 说明 |
+|---|---|
+| `root` | 扫描起点，默认 `.` |
+| `extensions` | 默认 `.ts` `.tsx` `.js` `.mjs` `.cjs` |
+| `exclude` | 正则数组，匹配相对路径就跳过 |
+
+注释和字符串里出现的形状**不算**（扫描器先遮掉注释与字符串再判断），所以文档和测试可以放心写反例。同样地，`errors/` 目录整个跳过——它是记录这条规则的地方，不该被自己报错。
+
 ### 通用规则（与方案引擎共用）
 
 `file-exists`、`file-absent`、`files-listed`、`placeholder-free`、`json-field`、`frontmatter-name`——语义见 [`SCHEMES.md`](SCHEMES.md)，同一套实现、同一套 pass/warn/fail。
@@ -152,9 +166,18 @@ markdown 里的**相对链接**必须解析得到。跳过 `http(s)://`、`mailt
   { "id": "contract:tools", "type": "contract-drift",
     "file": "docs/contracts/tools.json", "generator": "node scripts/gen-tools-contract.mjs" },
   { "id": "bundle:entry", "type": "file-exists", "path": "index.js" },
-  { "id": "bundle:patch", "type": "json-field", "path": "package.json", "field": "dsh.bundle.patch", "equals": "./cordis.patch.yml" }
+  { "id": "bundle:patch", "type": "json-field", "path": "package.json", "field": "dsh.bundle.patch", "equals": "./cordis.patch.yml" },
+  { "id": "session:messages", "type": "session-message-identity", "root": "." }
 ] }
 ```
+
+## `errors/`：踩过的坑也要能被检查
+
+规则分布在 `lib/rules.js`，但**为什么要这条规则**写在 [`errors/`](../errors/README.md)。一条已知会把人坑死的错误一个文件，格式像 skill：frontmatter 写 `id` / `severity` / `check`，正文写「什么时候会踩 / 症状 / 为什么当时不报 / 怎么查 / 怎么修」。
+
+这个目录是给下一个人（和下一个模型）看的：`lib/rules.js` 里的检查只说明**怎么查**，`errors/*.md` 说明**为什么值得查**。写不出「为什么当时不报」的条目，说明还没理解这个坑，先别加规则。
+
+`errors/` 里的 markdown 会引用坏形状的代码，所以 `session-message-identity` 规则和 `session:message-identity` 检查都跳过这个目录——**否则文档会把自己报成错误**，唯一的「修法」是删掉反例。
 
 ## 不做什么
 

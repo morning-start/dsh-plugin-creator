@@ -39,6 +39,11 @@
         "checks.json",
         ".github/workflows/release.yml"
       ]
+    },
+    {
+      "id": "session:messages",
+      "type": "session-message-identity",
+      "root": "."
     }
   ]
 }

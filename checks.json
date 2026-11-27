@@ -41,6 +41,15 @@
       "type": "contract-drift",
       "file": "templates/bundle/github-release.yml.tpl",
       "generator": "node scripts/gen-ci-template.mjs"
+    },
+    {
+      "id": "session:messages",
+      "type": "session-message-identity",
+      "root": ".",
+      "exclude": [
+        "^tmp/",
+        "^node_modules/"
+      ]
     }
   ]
 }

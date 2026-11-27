@@ -7,6 +7,7 @@ import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { loadChecks, runProjectChecks } from '../lib/checks.js'
+import { inspectBundle } from '../lib/bundle-check.js'
 import { runRules } from '../lib/rules.js'
 
 const repo = fileURLToPath(new URL('..', import.meta.url))
@@ -164,6 +165,80 @@ try {
   }])
   check('a failing generator fails the rule', brokenGenerator.checks[0].status === 'fail')
   check('the exit code is reported', /failed \(3\)/.test(brokenGenerator.checks[0].message), brokenGenerator.checks[0].message)
+
+  console.log('\nsession message identity')
+  const sessionRoot = join(work, 'session')
+  mkdirSync(sessionRoot, { recursive: true })
+  const sessionRule = [{ id: 'session', type: 'session-message-identity', root: '.' }]
+
+  // 反例先红：字面量直接交给会话，写的时候不报，加载时整段历史打不开。
+  writeFileSync(join(sessionRoot, 'bad-literal.js'), [
+    'export function remind(agent, text) {',
+    "  agent.followup({ role: 'user', content: [{ type: 'text', text }] })",
+    '}',
+  ].join('\n'))
+  const badLiteral = await runRules(sessionRoot, sessionRule)
+  check('a message literal without an id fails', badLiteral.checks[0].status === 'fail', badLiteral.checks[0].message)
+  check('the finding names the file and line', /bad-literal\.js:2/.test(badLiteral.checks[0].message), badLiteral.checks[0].message)
+  check('the finding explains the load-time failure', /lacks an identified message/.test(badLiteral.checks[0].message), badLiteral.checks[0].message)
+
+  // 正例：交给构造器补 id。
+  writeFileSync(join(sessionRoot, 'bad-literal.js'), [
+    "import { createUserMessage } from '@deepseek-ai/dsh-session'",
+    'export function remind(agent, text) {',
+    "  agent.followup(createUserMessage({ content: [{ type: 'text', text }], source: { kind: 'goal' } }))",
+    '}',
+  ].join('\n'))
+  const goodLiteral = await runRules(sessionRoot, sessionRule)
+  check('a message built by the identifying constructor passes', goodLiteral.checks[0].status === 'pass', goodLiteral.checks[0].message)
+
+  // 反例：事件 append 的载荷不是构造器。
+  writeFileSync(join(sessionRoot, 'bad-event.js'), [
+    'export function record(log, payload) {',
+    "  log.append('user/message', payload)",
+    '}',
+  ].join('\n'))
+  const badEvent = await runRules(sessionRoot, sessionRule)
+  check('an event appended from a bare payload fails', badEvent.checks[0].status === 'fail', badEvent.checks[0].message)
+
+  writeFileSync(join(sessionRoot, 'bad-event.js'), [
+    "import { createUserMessage } from '@deepseek-ai/dsh-session'",
+    'export function record(log, text) {',
+    "  log.append('user/message', createUserMessage({ content: [{ type: 'text', text }] }))",
+    '}',
+  ].join('\n'))
+  const goodEvent = await runRules(sessionRoot, sessionRule)
+  check('an event appended from the constructor passes', goodEvent.checks[0].status === 'pass', goodEvent.checks[0].message)
+
+  // 文档里写出这个形状不该算：注释和字符串先被遮掉。
+  writeFileSync(join(sessionRoot, 'doc-only.js'), [
+    '/** A message looks like `{ role: \'user\', content: [] }`. */',
+    "export const NOTE = \"{ role: 'user', content: [] }\"",
+    'export const ok = 1',
+  ].join('\n'))
+  const docOnly = await runRules(sessionRoot, sessionRule)
+  check('a shape spelled out in a comment or string is not a finding', docOnly.checks[0].status === 'pass', docOnly.checks[0].message)
+
+  // 同一个判断在 bundle-check 里也要成立，否则 check 工具永远 pass。
+  writeFileSync(join(sessionRoot, 'package.json'), JSON.stringify({ name: 'x', version: '1.0.0' }))
+  writeFileSync(join(sessionRoot, 'index.js'), [
+    'export function remind(agent, text) {',
+    "  agent.followup({ role: 'user', content: [{ type: 'text', text }] })",
+    '}',
+  ].join('\n'))
+  const bundleBad = (await inspectBundle(sessionRoot)).checks.find(item => item.id === 'session:message-identity')
+  check('the bundle check reports a bad literal too', bundleBad.status === 'warn', bundleBad.message)
+  check('the bundle check names the file and line', /index\.js:2/.test(bundleBad.message), bundleBad.message)
+
+  writeFileSync(join(sessionRoot, 'index.js'), [
+    "import { createUserMessage } from '@deepseek-ai/dsh-session'",
+    'export function remind(agent, text) {',
+    "  agent.followup(createUserMessage({ content: [{ type: 'text', text }] }))",
+    '}',
+  ].join('\n'))
+  const bundleGood = (await inspectBundle(sessionRoot)).checks.find(item => item.id === 'session:message-identity')
+  check('the bundle check passes a built message', bundleGood.status === 'pass', bundleGood.message)
+
 
   console.log('\nchecks file')
   await expectError('a missing checks file is an error', () => loadChecks(work), /no checks file/)

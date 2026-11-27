@@ -170,7 +170,7 @@ try {
     const starter = await runProjectChecks(dest)
     check(`${label}: the starter checks pass`, starter.ok === true, JSON.stringify(starter.checks.filter(item => item.status !== 'pass')))
     check(`${label}: the zh variant declares locale parity`,
-      values.titleZh === undefined ? starter.ran === 4 : starter.ran === 5, `${starter.ran} rules ran`)
+      values.titleZh === undefined ? starter.ran === 5 : starter.ran === 6, `${starter.ran} rules ran`)
   }
 
   const walked = await walk(join(work, 'out'))

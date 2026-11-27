@@ -48,6 +48,7 @@
     "cordis.patch.yml",
     "locale/*.json",
     "docs",
+    "errors",
     "icon.svg",
     "README.md"
   ],
