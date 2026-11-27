@@ -1,6 +1,15 @@
 ---
 id: manifest-shape
+name: dsh 清单字段写错
 title: package.json 的 dsh 字段写错，插件不会被当成插件
+cause: bundle.patch 写成数组、指向不存在的文件、dsh.client 漏了 exports["./client"]，或字段名拼错
+matches:
+  - "did not activate"
+  - "/plugins/.*/client.js 404"
+  - "unknown dsh field"
+location: 插件包的 package.json —— dsh 字段本身
+consequence: 插件装上了却什么也不做；dual-face 的浏览器半部永远为空
+fix: 按形态写对字段，bundle.patch 是单个字符串路径；声明 dsh.client 就同时给 exports["./client"]
 since: 0.1.5-alpha.1
 applies-to: [plugin]
 severity: broken
@@ -29,6 +38,14 @@ check: manifest-shape
 - `bundle.patch` 指向不存在的文件 → 装了没反应，`--dump-config` 里那行 `did not activate`；
 - dual-face 有 `dsh.client` 却漏了 `exports["./client"]` → 宿主伺服 `/plugins/<id>/client.js` 时 404，浏览器半部永远是空的；
 - 写成 `dsh.plugin` / `dsh.plugins` / `dsh.bundle.patches` → 字段名不对，等于没写。
+
+怎么确认是清单的问题而不是别处：跑 `--dump-config`，看你的包名在不在：
+
+```powershell
+dsh web --dump-config | Select-String -Pattern 'my-plugin' -Context 1,2
+```
+
+在 `dependencies` 里有、但 `bundles` 里没有，就是**没被当成 bundle**——回到 `dsh` 字段。
 
 ## 为什么写的时候不报
 

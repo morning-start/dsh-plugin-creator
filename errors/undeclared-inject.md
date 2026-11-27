@@ -1,6 +1,15 @@
 ---
 id: undeclared-inject
+name: 未声明 inject 就访问服务
 title: 没声明 inject 就访问服务，Proxy 直接拒绝
+cause: 代码里用了 ctx.<service>，但文件顶部没有 export const inject（类插件是 static inject）把它列出来
+matches:
+  - "is not declared in inject"
+  - "did not declare it"
+  - "Cannot access .* on the context"
+location: 插件入口的 inject 声明 与 函数体里所有 ctx.<service> 访问
+consequence: 插件加载即失败，那一行 did not activate；预设/面板对应的入口整块消失
+fix: 在文件顶部声明 inject: ['tools'] 等，或类插件写 static inject；声明过的服务才够得着
 since: 0.1.5-alpha.1
 applies-to: [plugin]
 severity: broken

@@ -131,6 +131,45 @@ markdown 里的**相对链接**必须解析得到。跳过 `http(s)://`、`mailt
 
 详见 [`errors/custom-session-event.md`](../errors/custom-session-event.md)。
 
+### `errors-card`
+
+`errors/` 里每个条目必须带一张完整的卡片。六样东西少一个就报：
+
+| 字段 | 要求 |
+|---|---|
+| `name` | 错误名称，列表里能一眼认出来 |
+| `cause` | 报错产生的原因（说机制，不说「写错了」） |
+| `matches` | 至少一条**系统原文**，反查的唯一抓手 |
+| `location` | 大致产生的位置 |
+| `consequence` | 产生的后果（用户看到什么） |
+| `fix` | 修法简述，一句话够定位 |
+
+另外三条：`id` 必须等于文件名、`severity` 只能是 `fatal` / `broken` / `noisy`、`check` 必须指向一个**真实存在**的规则类型（写 `none` 要另作说明）。
+
+`README.md` 被当作目录文档跳过；正文不参与检查——**卡片是索引，正文是解释**，规则只管索引完整。
+
+详见 [`errors/README.md`](../errors/README.md)。
+
+### `template-variants`
+
+同一个目标文件可以有多个模板变体（`index.js.tpl` 带工具、`index.min.js.tpl` 是 hello），由 `recipe.json` 的 `when` 二选一。变体多了会漂移，所以查四件事：
+
+1. **没有孤儿模板**：目录里每个 `.tpl` / `.txt` 都被 recipe 引用；
+2. **占位符都声明过**：`{{x}}` 必须在 `recipe.json` 的 `variables` 里，否则生成出残留占位符；
+3. **变体契约一致**：写同一个目标的变体，`export const name` 的值必须相同、都必须 `export apply(ctx)`——**只有注册什么可以不同**；
+4. **inject 与使用对得上**：声明了却没碰的服务会让插件永远等它；碰了却没声明的会被 Proxy 拒绝。
+
+```jsonc
+{ "id": "templates:variants", "type": "template-variants", "directory": "templates/bundle" }
+```
+
+| 参数 | 说明 |
+|---|---|
+| `directory` | 模板目录，默认 `templates/bundle` |
+| `recipe` | 方案文件名，默认 `recipe.json` |
+
+这条是把「hello 和原文件之间更规范」变成可执行的：**最小变体和完整变体是同一个插件的两种形态，不是两个插件**。
+
 ### 通用规则（与方案引擎共用）
 
 `file-exists`、`file-absent`、`files-listed`、`placeholder-free`、`json-field`、`frontmatter-name`——语义见 [`SCHEMES.md`](SCHEMES.md)，同一套实现、同一套 pass/warn/fail。
@@ -177,6 +216,12 @@ markdown 里的**相对链接**必须解析得到。跳过 `http(s)://`、`mailt
 | `locale:parity` | 只在生成时给了中文（有 `locale/zh.json`）才加 |
 | `bundle:entry` / `bundle:patch` | ✅ |
 | `bundle:files-listed` | ✅（`exclude` 里显式列出 `.gitignore`、`.gitattributes`、`checks.json` 这些本地文件） |
+| `manifest:dsh-shape` | ✅ |
+| `inject:declared` / `depends:bare-name` / `session:custom-event` | ✅（`root: "."`，新包还没有 `lib/` 时扫到 0 个文件也算通过） |
+| `session:messages` | ✅ |
+| `errors:cards` / `templates:variants` | 不预置（前者要求 `errors/` 目录，后者要求 `templates/bundle/`） |
+
+模板两套（`checks.json.tpl` 无中文 / `checks.json.zh.tpl` 有中文）因此分别有 **9 / 10 条**规则。
 
 两条设计取舍：
 
@@ -201,7 +246,9 @@ markdown 里的**相对链接**必须解析得到。跳过 `http(s)://`、`mailt
   { "id": "inject:declared", "type": "undeclared-inject", "root": ".", "exclude": ["^tmp/", "^scripts/"] },
   { "id": "depends:bare-name", "type": "bare-name-dependency", "root": ".", "exclude": ["^tmp/", "^scripts/"] },
   { "id": "manifest:dsh-shape", "type": "manifest-shape", "manifest": "package.json" },
-  { "id": "session:custom-event", "type": "custom-session-event", "root": "." }
+  { "id": "session:custom-event", "type": "custom-session-event", "root": "." },
+  { "id": "errors:cards", "type": "errors-card" },
+  { "id": "templates:variants", "type": "template-variants", "directory": "templates/bundle" }
 ] }
 ```
 

@@ -84,6 +84,15 @@
         "^tmp/",
         "^node_modules/"
       ]
+    },
+    {
+      "id": "errors:cards",
+      "type": "errors-card"
+    },
+    {
+      "id": "templates:variants",
+      "type": "template-variants",
+      "directory": "templates/bundle"
     }
   ]
 }

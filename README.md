@@ -39,7 +39,7 @@ plugin_manager  action: install_bundle  target: <这个检出的路径>
 
 **把项目自己的边界写成规则** —— 项目根的 `checks.json` 声明什么必须一直成立：相对文档链接可解析、多语言 key 一致、分层源码不向外 import、内层不碰宿主模块、不该打日志的地方没有 console、交给会话的消息带 id。逐条报告，每句都能照着改。**边界属于项目，不属于工具。** 见 [docs/CHECKS.md](docs/CHECKS.md)。
 
-**踩过的坑也要写成检查** —— 一条已知会把人坑死的错误一个文件，放在 [`errors/`](errors/README.md)，格式像 skill：什么时候会踩、症状、**为什么当时不报**、怎么查、怎么修。写不出「为什么当时不报」的条目，说明还没理解这个坑。文档里的「注意不要……」没有人会读第二遍，只有变成会自己跑的规则才算真的防住。现有条目对齐 [DSH 官方插件文档](https://deepseekdocs.com/docs/learn)里点名的硬性约束：清单 `dsh` 字段形状、未声明 `inject` 就访问服务、裸名依赖解析失败、自定义持久事件未声明。
+**踩过的坑也要写成检查** —— 一条已知会把人坑死的错误一个文件，放在 [`errors/`](errors/README.md)。每个文件是**卡片 + 正文**：卡片（frontmatter）只放能一眼判断的六样东西——错误名称、产生原因、**系统原文**、大致位置、后果、修法简述；正文放机制、为什么当时不报、完整修法、边界。卡片是索引，正文是解释，不重复。`node scripts/list-errors.mjs "系统原文"` 用原文反查。文档里的「注意不要……」没有人会读第二遍，只有变成会自己跑的规则（`node scripts/check-project.mjs`）才算真的防住。现有条目对齐 [DSH 官方插件文档](https://deepseekdocs.com/docs/learn)里点名的硬性约束：清单 `dsh` 字段形状、未声明 `inject` 就访问服务、裸名依赖解析失败、自定义持久事件未声明。
 
 **让开发中的插件进不了你在用的环境** —— 本地目录安装被拒绝，只有三种例外：已发布版本、本身是沙盒的宿主、用户明确决定。风险不对称：沙盒里一个坏 patch 的代价是一次重启，同样的 patch 落在工作 profile 上，代价是一个起不来的宿主。
 
@@ -53,7 +53,7 @@ plugin_manager  action: install_bundle  target: <这个检出的路径>
 
 **把条目提交到插件市场** —— 市场要的是一个 YAML 文件，条目由包生成而不是手写：`url` 和 `name` 来自 `git remote`（所以不可能指向别的仓库），那一行来自 `market.json`（因为它是会被维护者对着代码核对的**声明**，不能自动截断）。发布规则先在本地跑一遍——文件名 slug、分类取值、单行以句号结尾、`: ` 要加引号、图标必须位图、tarball 的 `latest/download/` 会烂——再由 `gh` 补上只有 GitHub 能回答的两条（仓库满 1 天、`dsh-plugin` topic）。见 [docs/RELEASE.md](docs/RELEASE.md)。
 
-**判断放在该放的地方** —— 两个 skill 承载工具不该编码的东西：生成前该问什么，以及怎么测一个插件而不产出假证据。
+**判断放在该放的地方** —— 三个 skill 承载工具不该编码的东西：生成前该问什么、怎么测一个插件而不产出假证据，以及**按卡片修错**（先认领是哪一类，再改，最后在真实宿主里验）。
 
 ## 快速开始
 
@@ -197,7 +197,7 @@ scripts/              CLI 与回归检查（adopt.mjs 规范化已有项目）
 ## 验证
 
 1. `dsh --profile desktop --dump-config` 里能看到 `creator-host` 行，以及一个插件列表以 `creator-tools`、`creator-skills` 结尾的 `preset-cordis`。
-2. **新开**一个创造模式会话，工具列表里有本包的工具，skill 列表里有 `dsh-plugin-new`、`dsh-plugin-sandbox`。
+2. **新开**一个创造模式会话，工具列表里有本包的工具，skill 列表里有 `dsh-plugin-new`、`dsh-plugin-sandbox`、`dsh-plugin-fix-error`。
 3. 新开一个标准模式会话，一个都没有。
 4. 对本仓库跑 `node scripts/check-project.mjs .`，5 条规则全过。
 

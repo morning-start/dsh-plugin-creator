@@ -1,6 +1,6 @@
 {
   "name": "dsh-plugin-creator",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "type": "module",
   "description": "Plugin-development toolkit for DeepSeek Harness: adds bundle and skill checks plus bundled skills to Creator mode only.",
   "repository": {
@@ -45,6 +45,7 @@
     "templates",
     "tools",
     "skills",
+    "scripts/list-errors.mjs",
     "cordis.patch.yml",
     "locale/*.json",
     "docs",

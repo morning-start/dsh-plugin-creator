@@ -1,6 +1,15 @@
 ---
 id: custom-session-event
+name: 自定义会话事件未声明
 title: 自定义持久事件没 augment SessionEventMap，session.append 拒绝未知类型
+cause: 往会话日志 append 自定义类型，但没在 declare module 里把该类型 augment 进 SessionEventMap
+matches:
+  - "unknown event type"
+  - "session.append"
+  - "is not assignable to type 'SessionEventMap'"
+location: session.append('<type>', …) 的调用点，以及同包的 SessionEventMap 声明合并
+consequence: 插件跑起来了，但"记录这件事"这一步反复失败；恢复会话后下游也看不到这条事件
+fix: 先 declare module '@deepseek-ai/dsh-session/types' 把类型加进 SessionEventMap，再 append
 since: 0.1.5-alpha.1
 applies-to: [plugin]
 severity: broken

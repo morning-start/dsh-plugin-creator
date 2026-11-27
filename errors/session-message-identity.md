@@ -1,6 +1,15 @@
 ---
 id: session-message-identity
+name: 会话消息缺少 id
 title: 交给会话的消息必须有 id，否则整段历史打不开
+cause: 自己拼一条消息交给会话——字面量，或 followup / steer / inject / append 的裸载荷——没带 id
+matches:
+  - "lacks an identified message"
+  - "is corrupt: stored session"
+  - "failed validation"
+location: 插件向会话投递消息的代码：followup / steer / inject / send / append
+consequence: 用户下次打开会话时整段历史加载失败；丢的不是一条消息，是整个会话
+fix: 用 createUserMessage / createDeveloperMessage 等构造函数（内部 randomUUID），不要手写字面量
 since: 2026-11
 applies-to: [plugin, project]
 severity: fatal
@@ -15,41 +24,29 @@ check: session-message-identity
 
 不适用：只读会话、只渲染历史、只发工具结果给宿主（由宿主构造）、只拼 prompt 字符串。
 
-## 症状
+## 原理：为什么写的时候不报
 
-用户升级重启后**整段会话打不开**，报：
-
-```
-session event at seq N lacks an identified message
-```
-
-不是那一条消息丢了，是**整个会话**加载失败。用户视角是「插件把历史搞坏了」。
-
-## 为什么写的时候不报
-
-DSH 的写入路径和加载路径校验不对称：
+DSH 的写入路径和加载路径校验**不对称**：
 
 - 写入：`Agent.followup / steer / inject / send` 不检查 `message.id`，事件照写；
 - 加载：`Session.fromRestore()` 逐条过 `assertSessionEventEnvelope`，`adoptSessionEvent` 遇到消息事件就要求非空 `id`，否则抛错，**整个会话拒绝加载**。
 
 所以这个错误在开发期完全静默，只在用户下次打开会话时爆炸。
 
-## 怎么查
+最典型的一处：`inject()` 把 `{ content, source }` 交给 `agent.steer()`。宿主 `Agent` 的签名是 `steer(message: UserMessage)`——它要的是**完整的 `UserMessage`**，不是两个字段。缺的 `id` 和 `role` 会被原样写进事件，然后在下次加载时炸。
+
+## 查到之后确认什么
+
+报错给出 `seq`，去会话日志里看那一条事件的形状：
 
 ```powershell
-node scripts/check-project.mjs --only session:messages
+# 会话日志是 zstd 压缩的两级目录
+zstdcat ~/.dsh/sessions/*/*/session*.jsonl.zstd | Select-String '"seq":2182'
 ```
 
-规则类型 `session-message-identity`，扫 `root` 下的源码，找四种写法：
+坏消息的样子是 `keys: ["content", "source"]`——没有 `id`、没有 `role`。好消息是 `keys: ["id", "role", "content", "source"]`。
 
-| 发现 | 原文 |
-|---|---|
-| 消息字面量没有 `id` | `a user message literal has no id` |
-| 事件 `append` 的载荷不是构造器 | `appends a user/message event from a payload that is not an identifying constructor` |
-| 交给 `followup / steer / inject / send / append / push` 的是字面量 | `followup() receives a message literal` |
-| 声明成 `Message` 类型却没有 `id` 的变量 | `"x" is declared as a user message without an id` |
-
-`id: ''` 和 `id: undefined` 同样算没有 id。注释和字符串里出现的形状**不算**（扫描器会先遮掉注释与字符串再判断）。
+一个文件里通常**只有一两条坏**，但一条就够让整段会话打不开。
 
 ## 怎么修
 
@@ -68,8 +65,18 @@ agent.followup(createUserMessage({
 
 ```js
 agent.followup({ role: 'user', content: [{ type: 'text', text: '继续' }] })   // 没有 id
+agent.steer({ content: [{ type: 'text', text: '继续' }], source: { kind: 'x' } })  // 没有 id，也没有 role
 log.append('user/message', { role: 'user', content: [] })                      // 没有 id
 ```
+
+## 已经坏掉的会话怎么办
+
+规则只能拦新的，拦不住已经写进日志的历史。要不要修历史是**用户的决定**：
+
+- 修：把缺失的 `id` 补成随机 UUID、`role` 补成 `user`，然后跑一遍宿主自己的 `adoptSessionEvent` 确认 `failed=0`；
+- 不修：只要后续不再产生新的坏消息，旧会话仍然打不开，但不会扩散。
+
+默认按「不修」处理——除非用户明确要求动历史。
 
 ## 为什么这条规则值得存在
 

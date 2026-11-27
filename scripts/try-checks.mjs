@@ -3,7 +3,7 @@
 //
 //   node scripts/try-checks.mjs
 
-import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { loadChecks, runProjectChecks } from '../lib/checks.js'
@@ -314,6 +314,108 @@ try {
   const declaredEvent = await runRules(eventRoot, eventRule)
   check('a declared event type passes', declaredEvent.checks[0].status === 'pass', declaredEvent.checks[0].message)
 
+  console.log('\nerror cards')
+  const cardRoot = join(work, 'cards')
+  mkdirSync(join(cardRoot, 'errors'), { recursive: true })
+  const cardRule = [{ id: 'cards', type: 'errors-card' }]
+  const fullCard = (overrides = []) => [
+    '---',
+    'id: demo-error',
+    'name: 示例错误',
+    'title: 一个用来测试卡片的错误',
+    'cause: 写错了一处',
+    'matches:',
+    '  - "demo error text"',
+    'location: 插件入口',
+    'consequence: 插件起不来',
+    'fix: 改回来',
+    'severity: broken',
+    'check: manifest-shape',
+    '---',
+    '',
+    '# 正文',
+    '',
+    '细节在这里。',
+    ...overrides,
+  ].join('\n')
+
+  writeFileSync(join(cardRoot, 'errors', 'demo-error.md'), fullCard())
+  const goodCard = await runRules(cardRoot, cardRule)
+  check('a complete card passes', goodCard.checks[0].status === 'pass', goodCard.checks[0].message)
+
+  // The card is what makes an entry scannable; a card missing a field is not a card.
+  writeFileSync(join(cardRoot, 'errors', 'demo-error.md'), fullCard().replace('  - "demo error text"\n', ''))
+  const noMatches = await runRules(cardRoot, cardRule)
+  check('a card without matches fails', noMatches.checks[0].status === 'fail', noMatches.checks[0].message)
+  check('the finding names the missing field', /matches/.test(noMatches.checks[0].message), noMatches.checks[0].message)
+
+  writeFileSync(join(cardRoot, 'errors', 'demo-error.md'), fullCard().replace('severity: broken', 'severity: who-knows'))
+  const badSeverity = await runRules(cardRoot, cardRule)
+  check('an unknown severity fails', badSeverity.checks[0].status === 'fail', badSeverity.checks[0].message)
+
+  writeFileSync(join(cardRoot, 'errors', 'demo-error.md'), fullCard().replace('check: manifest-shape', 'check: no-such-rule'))
+  const badCheck = await runRules(cardRoot, cardRule)
+  check('a card pointing at a rule that does not exist fails', badCheck.checks[0].status === 'fail', badCheck.checks[0].message)
+
+  writeFileSync(join(cardRoot, 'errors', 'demo-error.md'), fullCard().replace('id: demo-error', 'id: other-name'))
+  const badId = await runRules(cardRoot, cardRule)
+  check('an id that does not match the filename fails', badId.checks[0].status === 'fail', badId.checks[0].message)
+
+  writeFileSync(join(cardRoot, 'errors', 'README.md'), '# 目录说明\n')
+  writeFileSync(join(cardRoot, 'errors', 'demo-error.md'), fullCard())
+  const withReadme = await runRules(cardRoot, cardRule)
+  check('README.md is documentation, not a card', withReadme.checks[0].status === 'pass', withReadme.checks[0].message)
+
+  console.log('\ntemplate variants')
+  const tplRoot = join(work, 'templates')
+  mkdirSync(join(tplRoot, 'bundle'), { recursive: true })
+  const writeRecipe = (files) => writeFileSync(
+    join(tplRoot, 'bundle', 'recipe.json'),
+    JSON.stringify({ name: 'bundle', variables: [{ name: 'rowId' }, { name: 'title' }], files }),
+  )
+  const tplRule = [{ id: 'tpl', type: 'template-variants', directory: 'templates/bundle' }]
+  const fullTpl = "export const name = '{{rowId}}'\nexport const inject = ['tools']\nexport function apply(ctx) {\n  ctx.effect(() => ctx.tools.register({}))\n}\n"
+  const hello = "export const name = '{{rowId}}'\nexport function apply(ctx) {\n  void ctx\n}\n"
+
+  writeRecipe([
+    { from: 'index.tpl', to: 'index.js', when: 'withTool' },
+    { from: 'index.min.tpl', to: 'index.js', when: '!withTool' },
+  ])
+  writeFileSync(join(tplRoot, 'bundle', 'index.tpl'), fullTpl)
+  writeFileSync(join(tplRoot, 'bundle', 'index.min.tpl'), hello)
+  const goodTpl = await runRules(work, tplRule)
+  check('variants of one destination that agree pass', goodTpl.checks[0].status === 'pass', goodTpl.checks[0].message)
+
+  // The hello variant drifting away from the real one is the whole point of this rule.
+  writeFileSync(join(tplRoot, 'bundle', 'index.min.tpl'), "export const name = '{{rowId}}-hello'\nexport function apply(ctx) {\n  void ctx\n}\n")
+  const driftedTpl = await runRules(work, tplRule)
+  check('a variant with a different plugin name fails', driftedTpl.checks[0].status === 'fail', driftedTpl.checks[0].message)
+  check('the finding names both templates', /index\.min\.tpl/.test(driftedTpl.checks[0].message), driftedTpl.checks[0].message)
+
+  writeFileSync(join(tplRoot, 'bundle', 'index.min.tpl'), hello)
+  writeFileSync(join(tplRoot, 'bundle', 'orphan.tpl'), hello)
+  const orphan = await runRules(work, tplRule)
+  check('a template the recipe never uses fails', orphan.checks[0].status === 'fail', orphan.checks[0].message)
+  check('the finding names the orphan', /orphan\.tpl/.test(orphan.checks[0].message), orphan.checks[0].message)
+  rmSync(join(tplRoot, 'bundle', 'orphan.tpl'))
+
+  // Declaring a service you never use leaves the plugin waiting forever.
+  writeFileSync(join(tplRoot, 'bundle', 'index.min.tpl'), "export const name = '{{rowId}}'\nexport const inject = ['tools']\nexport function apply(ctx) {\n  void ctx\n}\n")
+  const idleInject = await runRules(work, tplRule)
+  check('declaring a service the template never touches fails', idleInject.checks[0].status === 'fail', idleInject.checks[0].message)
+  check('the finding explains the wait', /wait/i.test(idleInject.checks[0].message), idleInject.checks[0].message)
+
+  // Touching a service without declaring it is refused by the context Proxy.
+  writeFileSync(join(tplRoot, 'bundle', 'index.min.tpl'), "export const name = '{{rowId}}'\nexport function apply(ctx) {\n  ctx.tools.register({})\n}\n")
+  const missingInjectTpl = await runRules(work, tplRule)
+  check('touching a service without declaring it fails', missingInjectTpl.checks[0].status === 'fail', missingInject.checks[0].message)
+
+  writeFileSync(join(tplRoot, 'bundle', 'index.min.tpl'), hello)
+  writeRecipe([{ from: 'index.tpl', to: 'index.js' }])
+  writeFileSync(join(tplRoot, 'bundle', 'index.tpl'), "export const name = '{{rowId}}'\nexport function apply(ctx) {\n  void ctx\n}\n")
+  const undeclaredPlaceholder = await runRules(work, tplRule)
+  check('an undeclared placeholder fails', undeclaredPlaceholder.checks[0].status === 'fail', undeclaredPlaceholder.checks[0].message)
+
   console.log('\nchecks file')
   await expectError('a missing checks file is an error', () => loadChecks(work), /no checks file/)
   writeFileSync(join(work, 'checks.json'), JSON.stringify({ version: 1, rules: [{ id: 'entry', type: 'file-exists', path: 'package.json' }] }))
@@ -336,6 +438,29 @@ try {
   const own = await runProjectChecks(repo)
   check('this repository passes its own checks', own.ok === true, JSON.stringify(own.checks.filter(item => item.status !== 'pass')))
   check('the documentation tree was actually walked', /markdown file/.test(own.checks.find(item => item.id === 'docs:links')?.message ?? ''), JSON.stringify(own.checks))
+
+  // The fix-error skill is only useful if the cards it indexes are complete and
+  // the script it tells you to run actually ships with the package.
+  const skillsDir = join(repo, 'skills')
+  const skillNames = readdirSync(skillsDir, { withFileTypes: true }).filter(entry => entry.isDirectory()).map(entry => entry.name)
+  check('the fix-error skill exists', skillNames.includes('dsh-plugin-fix-error'), skillNames.join(', '))
+  const skillProblems = skillNames.filter((name) => {
+    let text
+    try {
+      text = readFileSync(join(skillsDir, name, 'SKILL.md'), 'utf8')
+    } catch {
+      return true
+    }
+    if (!text.startsWith('---\n')) return true
+    if (!new RegExp(`^name: ${name}$`, 'm').test(text)) return true
+    const description = /^description:\s*(.+)$/m.exec(text)?.[1] ?? ''
+    return description.replace(/^["']|["']$/g, '').length < 20
+  })
+  check('every bundled skill has a valid frontmatter', skillProblems.length === 0, skillProblems.join(', '))
+
+  const manifest = JSON.parse(readFileSync(join(repo, 'package.json'), 'utf8'))
+  check('the card lister ships with the package', (manifest.files ?? []).includes('scripts/list-errors.mjs'), JSON.stringify(manifest.files))
+  check('the cards ship with the package', (manifest.files ?? []).includes('errors'), JSON.stringify(manifest.files))
 } finally {
   rmSync(work, { recursive: true, force: true })
 }

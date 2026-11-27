@@ -1,6 +1,15 @@
 ---
 id: bare-name-dependency
+name: 裸名依赖解析不到
 title: 用裸名 import cordis / schemastery，装载闭包里解析不到
+cause: import 框架包时写了裸名（cordis、schemastery），而宿主装载闭包只含 @deepseek-ai/*
+matches:
+  - "Cannot find package"
+  - "ERR_MODULE_NOT_FOUND"
+  - "did not activate"
+location: 插件源码里所有 import / require / export … from 的模块说明符
+consequence: 插件加载失败，整行 did not activate；"我这儿好的" 是因为本地恰好有同名 node_modules
+fix: 框架一律用 @deepseek-ai/cordis、@deepseek-ai/schemastery；真要用的第三方裸名写进本包 dependencies
 since: 0.1.5-alpha.1
 applies-to: [plugin]
 severity: broken
