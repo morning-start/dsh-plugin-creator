@@ -185,6 +185,21 @@ try {
   const published = publishRelease(publishable, { publisher: fakePublisher, confirmed: true })
   check('a confirmed publish runs the publisher', published.ok === true && published.output.includes('@1.2.3'), published.output)
 
+  // Republishing a version that already exists (two releases in the same minute)
+  // fails with E403; the fix is to point `dist-tag` at this exact version.
+  const republishStub = join(work, 'stub-republish.mjs')
+  writeFileSync(republishStub, 'console.error("npm error You cannot publish over the previously published versions: 1.2.3.")\nprocess.exit(1)\n')
+  const republish = publishRelease(publishable, {
+    publisher: { kind: 'npm', command: `node "${republishStub}"` },
+    confirmed: true,
+    repairTag: true,
+    runDistTag: (command) => {
+      check('the repair points dist-tag at this exact version', /dist-tag add dsh-plugin-publishable@1\.2\.3 latest/.test(command), command)
+      return { status: 0, stdout: '+ latest: 1.2.3', stderr: '' }
+    },
+  })
+  check('a republish of an existing version repairs the dist-tag instead of failing', republish.ok === true && republish.repairTag === true, JSON.stringify(republish))
+
   const privateDir = join(work, 'private')
   mkdirSync(privateDir, { recursive: true })
   writeFileSync(join(privateDir, 'package.json'), JSON.stringify({ name: 'x', version: '1.0.0', private: true }))

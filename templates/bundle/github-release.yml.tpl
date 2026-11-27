@@ -87,15 +87,28 @@ jobs:
             echo "package.json is private: skipping npm publish"
             exit 0
           fi
-          npm publish --provenance --access public
+          # Idempotent: two tags pushed in the same minute race on `latest`, and the
+          # second publish either fails (E403, version exists) or repoints `latest`
+          # at the older version. Either way the fix is `dist-tag add` this version,
+          # not a new release — so publish, and repair the tag if the version exists.
+          name=$(node -p "require('./package.json').name")
+          version=$(node -p "require('./package.json').version")
+          if npm publish --provenance --access public; then
+            echo "published $name@$version"
+          else
+            echo "publish failed; ensuring dist-tag latest -> $version"
+            npm dist-tag add "$name@$version" latest
+          fi
 
       - name: Create the GitHub Release
         env:
           GH_TOKEN: $\{{ github.token }}
         run: |
-          gh release create "$GITHUB_REF_NAME" "$ASSET" \
-            --title "$GITHUB_REF_NAME" \
-            --generate-notes
+          # Idempotent: a rerun (or a tag pushed twice) must not fail here.
+          gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1 \
+            && echo "release $GITHUB_REF_NAME already exists" \
+            || gh release create "$GITHUB_REF_NAME" "$ASSET" --title "$GITHUB_REF_NAME" --generate-notes
+
 
       # After the release on purpose: the registry can take longer than any
       # reasonable wait to serve a brand-new version, and that lag must not hold
