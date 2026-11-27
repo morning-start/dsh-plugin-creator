@@ -50,6 +50,40 @@
         "^tmp/",
         "^node_modules/"
       ]
+    },
+    {
+      "id": "inject:declared",
+      "type": "undeclared-inject",
+      "root": ".",
+      "exclude": [
+        "^tmp/",
+        "^node_modules/",
+        "^scripts/"
+      ]
+    },
+    {
+      "id": "depends:bare-name",
+      "type": "bare-name-dependency",
+      "root": ".",
+      "exclude": [
+        "^tmp/",
+        "^node_modules/",
+        "^scripts/"
+      ]
+    },
+    {
+      "id": "manifest:dsh-shape",
+      "type": "manifest-shape",
+      "manifest": "package.json"
+    },
+    {
+      "id": "session:custom-event",
+      "type": "custom-session-event",
+      "root": ".",
+      "exclude": [
+        "^tmp/",
+        "^node_modules/"
+      ]
     }
   ]
 }

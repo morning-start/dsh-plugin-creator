@@ -62,9 +62,15 @@ node scripts/check-project.mjs                           # 全跑
 
 ## 现有条目
 
-| 条目 | 严重度 | 检查 |
-|---|---|---|
-| [session-message-identity](session-message-identity.md) | fatal | `session-message-identity` |
+| 条目 | 严重度 | 检查 | 出处 |
+|---|---|---|---|
+| [session-message-identity](session-message-identity.md) | fatal | `session-message-identity` | 真实事故 |
+| [manifest-shape](manifest-shape.md) | broken | `manifest-shape` | 插件解剖 · 清单字段 |
+| [undeclared-inject](undeclared-inject.md) | broken | `undeclared-inject` | 第一个插件 · 常见坑 |
+| [bare-name-dependency](bare-name-dependency.md) | broken | `bare-name-dependency` | 插件解剖 · 依赖解析 |
+| [custom-session-event](custom-session-event.md) | broken | `custom-session-event` | 监听事件 · 双事件平面 |
+
+后四条来自官方文档 <https://deepseekdocs.com/docs/learn> 的「插件解剖 / 第一个插件 / 监听事件」等篇目里点名的硬性约束——文档写了「会踩」，这里把它变成会自己跑的检查。
 
 ## 和 `skills/*/references/incidents.md` 的分工
 

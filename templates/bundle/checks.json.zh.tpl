@@ -44,6 +44,26 @@
       "id": "session:messages",
       "type": "session-message-identity",
       "root": "."
+    },
+    {
+      "id": "manifest:dsh-shape",
+      "type": "manifest-shape",
+      "manifest": "package.json"
+    },
+    {
+      "id": "inject:declared",
+      "type": "undeclared-inject",
+      "root": "."
+    },
+    {
+      "id": "depends:bare-name",
+      "type": "bare-name-dependency",
+      "root": "."
+    },
+    {
+      "id": "session:custom-event",
+      "type": "custom-session-event",
+      "root": "."
     }
   ]
 }

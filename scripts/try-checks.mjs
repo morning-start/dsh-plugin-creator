@@ -239,6 +239,80 @@ try {
   const bundleGood = (await inspectBundle(sessionRoot)).checks.find(item => item.id === 'session:message-identity')
   check('the bundle check passes a built message', bundleGood.status === 'pass', bundleGood.message)
 
+  console.log('\nundeclared inject')
+  const injectRoot = join(work, 'inject')
+  mkdirSync(injectRoot, { recursive: true })
+  const injectRule = [{ id: 'inject', type: 'undeclared-inject', root: '.' }]
+  // 反例先红：访问了 ctx.tools 却没写 inject。
+  writeFileSync(join(injectRoot, 'missing.js'), [
+    'export function apply(ctx) {',
+    "  ctx.tools.register({ name: 'x' })",
+    '}',
+  ].join('\n'))
+  const missingInject = await runRules(injectRoot, injectRule)
+  check('accessing a service without declaring it fails', missingInject.checks[0].status === 'fail', missingInject.checks[0].message)
+  check('the finding names the service', /ctx\.tools/.test(missingInject.checks[0].message), missingInject.checks[0].message)
+  // 正例：声明了就过。
+  writeFileSync(join(injectRoot, 'missing.js'), [
+    "export const inject = ['tools']",
+    'export function apply(ctx) {',
+    "  ctx.tools.register({ name: 'x' })",
+    '}',
+  ].join('\n'))
+  const declaredInject = await runRules(injectRoot, injectRule)
+  check('a declared service passes', declaredInject.checks[0].status === 'pass', declaredInject.checks[0].message)
+  // ctx 动词不算服务。
+  writeFileSync(join(injectRoot, 'missing.js'), [
+    'export function apply(ctx) {',
+    "  ctx.effect(() => {})",
+    "  ctx.on('agent/created', () => {})",
+    '}',
+  ].join('\n'))
+  const verbsOnly = await runRules(injectRoot, injectRule)
+  check('ctx verbs are not services', verbsOnly.checks[0].status === 'pass', verbsOnly.checks[0].message)
+
+  console.log('\nbare-name dependency')
+  const depRoot = join(work, 'deps')
+  mkdirSync(depRoot, { recursive: true })
+  writeFileSync(join(depRoot, 'package.json'), JSON.stringify({ name: 'x', version: '1.0.0', dependencies: { 'left-pad': '1.0.0' } }))
+  const depRule = [{ id: 'dep', type: 'bare-name-dependency', root: '.' }]
+  writeFileSync(join(depRoot, 'index.js'), "import { Context } from 'cordis'\nexport const x = Context\n")
+  const bareImport = await runRules(depRoot, depRule)
+  check('a bare framework import fails', bareImport.checks[0].status === 'fail', bareImport.checks[0].message)
+  check('the finding names the specifier', /"cordis"/.test(bareImport.checks[0].message), bareImport.checks[0].message)
+  writeFileSync(join(depRoot, 'index.js'), "import { Context } from '@deepseek-ai/cordis'\nimport leftPad from 'left-pad'\nimport { readFile } from 'node:fs/promises'\nexport const x = [Context, leftPad, readFile]\n")
+  const goodImport = await runRules(depRoot, depRule)
+  check('scoped, declared, and builtin imports pass', goodImport.checks[0].status === 'pass', goodImport.checks[0].message)
+
+  console.log('\nmanifest shape')
+  const manifestRoot = join(work, 'manifest')
+  mkdirSync(manifestRoot, { recursive: true })
+  const manifestRule = [{ id: 'manifest', type: 'manifest-shape', manifest: 'package.json' }]
+  writeFileSync(join(manifestRoot, 'package.json'), JSON.stringify({ name: 'x', version: '1.0.0', dsh: { bundle: { patch: ['./a.yml', './b.yml'] } } }))
+  const arrayPatch = await runRules(manifestRoot, manifestRule)
+  check('an array bundle.patch fails', arrayPatch.checks[0].status === 'fail', arrayPatch.checks[0].message)
+  writeFileSync(join(manifestRoot, 'package.json'), JSON.stringify({ name: 'x', version: '1.0.0', dsh: { client: {} } }))
+  const missingClient = await runRules(manifestRoot, manifestRule)
+  check('dsh.client without exports["./client"] fails', missingClient.checks[0].status === 'fail', missingClient.checks[0].message)
+  writeFileSync(join(manifestRoot, 'package.json'), JSON.stringify({ name: 'x', version: '1.0.0', dsh: { plugn: {} } }))
+  const unknownKey = await runRules(manifestRoot, manifestRule)
+  check('an unknown dsh field fails', unknownKey.checks[0].status === 'fail', unknownKey.checks[0].message)
+  writeFileSync(join(manifestRoot, 'package.json'), JSON.stringify({ name: 'x', version: '1.0.0', dsh: { bundle: { patch: './cordis.patch.yml' } } }))
+  writeFileSync(join(manifestRoot, 'cordis.patch.yml'), '- insert: []\n')
+  const goodManifest = await runRules(manifestRoot, manifestRule)
+  check('a well formed dsh manifest passes', goodManifest.checks[0].status === 'pass', goodManifest.checks[0].message)
+
+  console.log('\ncustom session event')
+  const eventRoot = join(work, 'events')
+  mkdirSync(eventRoot, { recursive: true })
+  const eventRule = [{ id: 'event', type: 'custom-session-event', root: '.' }]
+  writeFileSync(join(eventRoot, 'index.js'), 'export function record(session) {\n  session.append(\'my-plugin/thing\', { detail: 1 })\n}\n')
+  const undeclaredEvent = await runRules(eventRoot, eventRule)
+  check('appending an undeclared event type fails', undeclaredEvent.checks[0].status === 'fail', undeclaredEvent.checks[0].message)
+  check('the finding names the type', /my-plugin\/thing/.test(undeclaredEvent.checks[0].message), undeclaredEvent.checks[0].message)
+  writeFileSync(join(eventRoot, 'types.ts'), "declare module '@deepseek-ai/dsh-session/types' {\n  interface SessionEventMap {\n    'my-plugin/thing': { type: 'my-plugin/thing'; detail: number }\n  }\n}\n")
+  const declaredEvent = await runRules(eventRoot, eventRule)
+  check('a declared event type passes', declaredEvent.checks[0].status === 'pass', declaredEvent.checks[0].message)
 
   console.log('\nchecks file')
   await expectError('a missing checks file is an error', () => loadChecks(work), /no checks file/)

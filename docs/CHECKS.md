@@ -101,6 +101,36 @@ markdown 里的**相对链接**必须解析得到。跳过 `http(s)://`、`mailt
 
 注释和字符串里出现的形状**不算**（扫描器先遮掉注释与字符串再判断），所以文档和测试可以放心写反例。同样地，`errors/` 目录整个跳过——它是记录这条规则的地方，不该被自己报错。
 
+### `undeclared-inject`
+
+访问 `ctx.<service>` 却没在 `inject` 里声明。DSH 的上下文是 Proxy，未声明的服务**在加载那一刻**就被拒绝——不是运行时才炸。
+
+判断只在**插件上下文**上做：文件里要有 `apply(ctx)` / `constructor(ctx)` 参数，否则一个名字叫 `ctx` 的普通对象不算。`ctx.on` / `ctx.effect` / `ctx.get` / `ctx.inject` 这些 ctx 自己的动词不是服务，不报。声明从**原文**读（`export const inject = ['tools']`、`static inject`、对象形式），访问从遮罩文本读。
+
+详见 [`errors/undeclared-inject.md`](../errors/undeclared-inject.md)。
+
+### `bare-name-dependency`
+
+`import ... from 'cordis'` 这种裸名在 DSH 的装载闭包里解析不到——闭包只含 `@deepseek-ai/*`。规则列出裸名、且不在本包 `dependencies`/`devDependencies`/`peerDependencies` 里的说明符。相对路径、绝对路径、`node:` 与 Node 内置模块都不算。
+
+详见 [`errors/bare-name-dependency.md`](../errors/bare-name-dependency.md)。
+
+### `manifest-shape`
+
+`package.json` 的 `dsh` 字段形状。四条判断：`bundle.patch` 必须是**单个字符串**（写成数组会静默失效）、它指向的文件必须存在、声明了 `dsh.client` 就必须有 `exports["./client"]`、`dsh` 下不能出现 `bundle`/`client`/`profile` 之外的键。
+
+只管清单形状；patch 内容的语义（`insert` / 按 id 覆盖 / `config` 整行替换）不在这一条。
+
+详见 [`errors/manifest-shape.md`](../errors/manifest-shape.md)。
+
+### `custom-session-event`
+
+`session.append('<type>', ...)` 的类型必须先 `declare module '@deepseek-ai/dsh-session/types'` 把 `<type>` augment 进 `SessionEventMap`，否则 DSH 拒绝未知类型。规则对账两边的类型集合。
+
+只管平面 B（持久日志）；`ctx.emit` 那套进程内事件不用声明。
+
+详见 [`errors/custom-session-event.md`](../errors/custom-session-event.md)。
+
 ### 通用规则（与方案引擎共用）
 
 `file-exists`、`file-absent`、`files-listed`、`placeholder-free`、`json-field`、`frontmatter-name`——语义见 [`SCHEMES.md`](SCHEMES.md)，同一套实现、同一套 pass/warn/fail。
@@ -167,7 +197,11 @@ markdown 里的**相对链接**必须解析得到。跳过 `http(s)://`、`mailt
     "file": "docs/contracts/tools.json", "generator": "node scripts/gen-tools-contract.mjs" },
   { "id": "bundle:entry", "type": "file-exists", "path": "index.js" },
   { "id": "bundle:patch", "type": "json-field", "path": "package.json", "field": "dsh.bundle.patch", "equals": "./cordis.patch.yml" },
-  { "id": "session:messages", "type": "session-message-identity", "root": "." }
+  { "id": "session:messages", "type": "session-message-identity", "root": "." },
+  { "id": "inject:declared", "type": "undeclared-inject", "root": ".", "exclude": ["^tmp/", "^scripts/"] },
+  { "id": "depends:bare-name", "type": "bare-name-dependency", "root": ".", "exclude": ["^tmp/", "^scripts/"] },
+  { "id": "manifest:dsh-shape", "type": "manifest-shape", "manifest": "package.json" },
+  { "id": "session:custom-event", "type": "custom-session-event", "root": "." }
 ] }
 ```
 

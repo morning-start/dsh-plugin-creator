@@ -67,6 +67,14 @@ README 讲能力，这个文件讲**具体是哪个工具、什么参数、边�
 
 同样地，`errors/` 目录整个跳过：那是记录这条规则的地方，不该被自己报错。
 
+#### 清单形状
+
+| 检查 | 级别 | 查什么 |
+|---|---|---|
+| `dsh-shape` | fail | `package.json` 的 `dsh` 字段：`bundle.patch` 是否为单个字符串路径、`dsh.client` 是否有 `exports["./client"]`、有没有未知字段 |
+
+`bundle.patch` 写成数组是**静默失效**的典型：JSON 合法、`npm pack` 成功，宿主读不懂就当普通包。不存在 `dsh.plugin.json`——真实清单只有 `package.json` 的 `dsh` 字段。
+
 **查不到**：YAML 语法错误（不按 YAML 解析 patch 文件）、运行时行为、客户端渲染、依赖供应链（不查第三方包漏洞）。
 
 ### `dsh_plugin_new`
