@@ -39,10 +39,17 @@ curl -s https://registry.npmjs.org/<name>/<version> | jq '.version, ._npmUser'
 
 后三处是**模块说明符**，不是注释：漏一处，包装得上但工具或 skill 加载不出来。
 
+还要顺手 grep 一遍你自己仓库里的**断言**：`checks.json` 里常有 `package-name` 之类的规则，文档/技能里也有写着旧包名的命令示例。改名后先跑全量检查，让它告诉你漏了哪里：
+
+```bash
+node scripts/check-project.mjs . && node scripts/try-checks.mjs
+```
+
 **不用改的**（这些都是稳定标识，不是包身份）：
 
 - 仓库 URL（仓库名没跟着变）
 - 工具 id `dsh-plugin-creator/dsh_plugin_*`、沙箱 marker `dsh-plugin-creator/sandbox`
+- 用户已存在的沙箱目录名（`.dsh-*` 那种）——改了旧沙箱就找不着了
 - release 资产名——生成的 workflow 本来就剥 scope：
   ```bash
   asset=$(node -p "require('./package.json').name.replace(/^@[^/]+\//, '')")
@@ -83,7 +90,8 @@ npm trust revoke <包名> --id=<id>                                      # 轮�
 - `--repo` **可省**，取自 `package.json` 的 `repository`（不是 git remote），清单里没写才必须给；
 - **至少一个权限标志**：`--allow-publish` / `--allow-stage-publish`（别名 `--allow-staged-publish`）；
 - 需要**账号 2FA + 对包有写权限**；
-- **信任是 per-package 的**：改了名，新名字要**重新配一遍**，旧的信任不会跟过来。
+- **信任是 per-package 的**：改了名，新名字要**重新配一遍**，旧的信任不会跟过来；
+- 成功后接口返回 **201**（不是 200）。判成功用 `201 / 200` 都算，别只认 200——这会把自己的成功误报成失败。
 
 ### 两个必踩的坑
 
@@ -107,10 +115,33 @@ if (!process.stdin.isTTY || !process.stdout.isTTY) throw err
 | 环境 | 可行做法 |
 |---|---|
 | 你本人的真终端 | `npm trust ...`，它打印链接、等你按 ENTER |
-| agent / 脚本 | 浏览器表单：npmjs.com → 这个包 → Settings → **Trusted Publisher** |
+| agent / 脚本 | 见下面「非交互环境怎么走完」——**链接是能拿到的** |
 | 只想看会配成什么 | `--dry-run`，不需要 2FA |
 
 **2FA 必须真人。** 安全密钥要插上触摸、指纹要按；程序注入的点击**不算**「用户激活」——页面停在原地，不报错，也不前进。真实记录：两轮注入点击各等 5 分钟超时，换成用户亲手点，同一秒就收到票据。
+
+### 非交互环境怎么走完 2FA
+
+脱敏发生在 **npm 的输出层**，registry 返回的响应体里 `authUrl` 和 `doneUrl` 是完整的。所以照 npm 内部做的三步自己发一遍就行：
+
+1. `POST https://registry.npmjs.org/-/package/<escapedName>/trust`
+   - 头：`authorization: Bearer <会话 token>`、`npm-auth-type: web`、`npm-command: trust`、`npm-session: <随机 uuid>`、`content-type: application/json`
+   - 体：`[{"type":"github","claims":{"repository":"owner/repo","workflow_ref":{"file":"release.yml"}},"permissions":["createPackage"]}]`
+2. 返回 `401` 时**响应体里就有完整 `authUrl`**：把它交给用户，他过 2FA；同时轮询 `doneUrl`
+   （`202` 继续等，按 `retry-after`；`200` 拿到 `token`）
+3. 带着票据重发第 1 步，加 `npm-otp: <ticket>`；`201` 即成功
+
+三个细节，踩过才知道：
+
+- **`npm-auth-type: web` 不能少**。缺这个头，会话 token 会被当成旧式凭据，直接回 `401 {"message":"Unauthorized"}`，**没有** `authUrl`——看起来像权限问题，其实是头不全。
+- **scoped 包名要按 npa 的 `escapedName` 编码**：`@scope/name` → `@scope%2fname`。`encodeURIComponent` 会把 `@` 变成 `%40`，路由就不对。
+- **`authUrl` 有效期很短**（分钟级）。等太久 `doneUrl` 会回 `404`，那一轮就废了，重新发一次第 1 步换新链接。
+
+**核对信任时 `npm trust list` 同样要 2FA**，非交互环境一样走不通。改用探测：
+
+```
+不带 OTP 发一次第 1 步 → 200 表示已配好（幂等），401 表示还没配
+```
 
 ## 五、日常发版：tag → CI → OIDC
 
@@ -145,10 +176,23 @@ curl -s https://registry.npmjs.org/<name>/<version> | jq '{user: ._npmUser, att:
 |---|---|---|
 | 版本内容有错 | 发补丁版本 | `npm unpublish`——会打断所有锁了版本的依赖 |
 | 版本不该被安装 | `npm deprecate <name>@<ver> "原因"` | 删包 |
-| 改了包名 | 新名字发一版 + `npm deprecate` 旧名指向新名 | 以为 npm 支持改名（它不支持） |
+| 改了包名 | 新名字发一版，旧名标弃用 | 以为 npm 支持改名（它不支持） |
 | 信任配错了 | `npm trust revoke` 再重配 | 留着旧条目 |
 
-`deprecate` 是**声明**：装着的人仍能用，只是看到警告。这正是它比删除好的地方。
+`deprecate` 本该只是**声明**：装着的人仍能用，看到警告而已。**但在本账号上实测出了意外** ——
+
+对旧包执行 `npm deprecate dsh-plugin-creator "Renamed to @morning-start/…"` 之后，整个包变成了墓碑：
+
+```json
+{"_id":"dsh-plugin-creator","name":"dsh-plugin-creator","time":{…},"_rev":"…"}   // 没有 versions / dist-tags
+npm error 404 Unpublished on 2026-11-28T10:37:01.094Z
+```
+
+10 个版本全部 404，`time.modified` 与那次 deprecate 的时刻一致。**所以别把 deprecate 当成「安全无害」的动作**：它可能把整包带走。
+
+- 动手前：确认这个包**还需要被别人安装**吗？不需要才做；需要就先只发新版本，弃用等确认没依赖了再说。
+- 动手后：立刻查版本端点 `registry.npmjs.org/<pkg>/<ver>`，别只看根文档（它可能只剩墓碑）。
+- 已经被下架：名字 24 小时内不能复用；用新名字继续发即可，已装的人不受影响。
 
 ## 八、报错反查
 
@@ -158,8 +202,9 @@ curl -s https://registry.npmjs.org/<name>/<version> | jq '{user: ._npmUser, att:
 | `EUSAGE: Automatic provenance generation not supported for provider: null` | 本地发布却要生成 provenance | 加 `--provenance=false` |
 | `404 Not Found - PUT .../<pkg>`（publish 时） | **不是包不存在**，是匿名发布 | 加 token，或配 Trusted Publisher |
 | `cannot publish over the previously published versions` | 版本已在 registry | 改版本号发新的；别动旧 tag |
-| `EOTP` + `auth/cli/***` | 非 TTY，npm 不给完整链接 | 真终端，或浏览器表单 |
+| `EOTP` + `auth/cli/***` | 非 TTY，npm 不给完整链接 | 真终端，或自己发一遍请求（见四） |
 | 版本端点 200 但根文档 404 | registry 副本延迟 | 等；用版本端点核对 |
+| `404 Unpublished on <日期>` | 包被整包下架（不是弃用） | 见七；新名字重发 |
 | `0.0.0-stage` 占位出现 | npm 11 暂存发布的中转状态 | 等真版本落地，别重发 |
 | `publish` 成功但 npm 上查不到 | 输出被管道吞了退出码（`npm publish \| tee`） | 看产物：版本端点 |
 
@@ -167,6 +212,7 @@ curl -s https://registry.npmjs.org/<name>/<version> | jq '{user: ._npmUser, att:
 
 - 不要本地 `npm publish` 日常版本——没有 provenance，且版本与 tag 在推 tag 那一刻才对账。
 - 不要把发布命令接进管道；`npm publish | tee log` 的退出码是 `tee` 的，失败也会「成功」。
+- 不要随手 `deprecate` 一个还有人在装的包——本账号上它把整包带走过。
 - 不要用 `unpublish` 修内容问题；用 `deprecate` + 新版本。
 - 不要在镜像 registry 上配 Trusted Publisher（npm 会警告 `may not support trusted publishing`）。
 - 不要只信 CI 的绿勾；看 registry 的 `_npmUser` 与 `attestations`。

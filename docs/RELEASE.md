@@ -262,7 +262,8 @@ npm trust revoke <包名> --id=<id> # 轮换/改名时用
 | 环境 | 用什么 |
 |---|---|
 | 你本人在真终端 | `npm trust ...`，它会打印链接并等你确认 |
-| 非交互（agent、CI、脚本） | 浏览器表单：npmjs.com → 这个包 → Settings → **Trusted Publisher** |
+| 非交互（agent、CI、脚本） | 直接向 registry 发那三步：拿未脱敏的 `authUrl` → 用户过 2FA → 带票重发。做法与踩过的细节在 [`skills/dsh-plugin-npm`](../skills/dsh-plugin-npm/SKILL.md) 第四节 |
+| 想绕开 CLI 自己动手 | 浏览器表单：npmjs.com → 这个包 → Settings → **Trusted Publisher** |
 | 只想看会配成什么 | `--dry-run`，不需要 2FA，任何环境都能跑 |
 
 **bypass-2FA 的 token 配不了信任。** 这类 token（CI 里常见的那种）发布能用，改信任会被拒：
