@@ -202,7 +202,7 @@ scripts/              CLI 与回归检查（adopt.mjs 规范化已有项目）
 ## 验证
 
 1. `dsh --profile desktop --dump-config` 里能看到 `creator-host` 行，以及一个插件列表以 `creator-tools`、`creator-skills` 结尾的 `preset-cordis`。
-2. **新开**一个创造模式会话，工具列表里有本包的工具，skill 列表里有 `dsh-plugin-new`、`dsh-plugin-sandbox`、`dsh-plugin-fix-error`、`dsh-plugin-npm`。
+2. **新开**一个创造模式会话，工具列表里有本包的工具，skill 列表里有 `dsh-plugin-new`、`dsh-plugin-sandbox`、`dsh-plugin-fix-error`、`npm-package-manager`。
 3. 新开一个标准模式会话，一个都没有。
 4. 对本仓库跑 `node scripts/check-project.mjs .`，5 条规则全过。
 

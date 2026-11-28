@@ -63,7 +63,7 @@ node scripts/ui.mjs close
 
 | 预设 | 结果 |
 |---|---|
-| 创造模式 | 八个工具全部出现：`dsh_plugin_new` `dsh_plugin_check` `dsh_project_check` `dsh_sandbox` `dsh_plugin_ui` `dsh_plugin_release` `dsh_plugin_adopt` `dsh_repo`；skill 列表里有 `dsh-plugin-new`、`dsh-plugin-sandbox`、`dsh-plugin-fix-error`、`dsh-plugin-npm` |
+| 创造模式 | 八个工具全部出现：`dsh_plugin_new` `dsh_plugin_check` `dsh_project_check` `dsh_sandbox` `dsh_plugin_ui` `dsh_plugin_release` `dsh_plugin_adopt` `dsh_repo`；skill 列表里有 `dsh-plugin-new`、`dsh-plugin-sandbox`、`dsh-plugin-fix-error`、`npm-package-manager` |
 | 标准模式 | 八个工具**一个都没有**（同一套脚本，反向断言） |
 
 这条检查有代价：要有一个模型，会真的发一轮消息。所以它是**发版前的一次性确认**，不是每次提交都跑。

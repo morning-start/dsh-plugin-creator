@@ -257,7 +257,7 @@ npm trust list <包名>          # 核对
 npm trust revoke <包名> --id=<id>   # 轮换/改名时用
 ```
 
-账号与 registry 那一侧的判断（信任关系、token 与 OIDC 的取舍、dist-tag、`deprecate` 代替 `unpublish`、各种 npm 报错的原因）在 [`skills/dsh-plugin-npm/SKILL.md`](../skills/dsh-plugin-npm/SKILL.md)。
+账号与 registry 那一侧的判断（信任关系、token 与 OIDC 的取舍、dist-tag、`deprecate` 代替 `unpublish`、各种 npm 报错的原因）在 [`skills/npm-package-manager/SKILL.md`](../skills/npm-package-manager/SKILL.md)。
 
 什么时候才需要 token：用不了 OIDC 的时候（私有 registry、self-hosted runner）。那时才加 `NPM_TOKEN` secret，并接受它是长期有效的、需要轮换——能不用就别用。
 

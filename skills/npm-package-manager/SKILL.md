@@ -1,13 +1,13 @@
 ---
-name: dsh-plugin-npm
-description: "管一个 DSH 插件在 npm 上的事后半程：第一次发布怎么引导（本机 token 本地发一次）、Trusted Publisher 怎么配/查/撤销（npm trust github / list / revoke）、token 与 OIDC 谁优先、`latest` 与预发布的 dist-tag 怎么放、发完怎么对账、发错了怎么弃用而不是 unpublish，以及 E404 / E403 / ENEEDAUTH / 镜像警告这些报错各是什么原因。当你要「发版」「配 trusted publisher」「npm 上版本不对」「dist-tag 指错了」「撤销信任」「deprecate」「首次发布」「npm 报 404/403/需要 OTP」时用它；只改版本、打包、沙盒演练走 `dsh_plugin_release` 工具，不需要这个技能。"
+name: npm-package-manager
+description: "管一个 npm 包的账号与 registry 那一侧：第一次发布怎么引导（本机 token 本地发一次）、Trusted Publisher 怎么配/查/撤销（npm trust github / list / revoke）、token 与 OIDC 谁优先、`latest` 与预发布的 dist-tag 怎么放、发完怎么对账、发错了怎么弃用而不是 unpublish，以及 E404 / E403 / ENEEDAUTH / 镜像警告这些报错各是什么原因。当你要「发版」「配 trusted publisher」「npm 上版本不对」「dist-tag 指错了」「撤销信任」「deprecate」「首次发布」「npm 报 404/403/需要 OTP」时用它——不限 DSH 插件，任何 npm 包都适用；只改版本、打包、沙盒演练这类机械步骤走项目自己的发布工具，不需要这个技能。"
 ---
 
 # npm 包管理
 
-这个技能管的是**账号与 registry 那一侧**的事：信任关系、凭据、标签、弃用、对账。
+这个技能管的是**账号与 registry 那一侧**的事：信任关系、凭据、标签、弃用、对账。**与具体项目无关**——DSH 插件、普通库、CLI 都一样。
 
-**机械步骤不在这里面**——改版本、就绪检查、打包、沙盒演练是 `dsh_plugin_release` 工具（`version` / `check` / `pack` / `rehearse`）和 `docs/RELEASE.md` 的事。这里只写工具不该编码的判断。
+**机械步骤不在这里面**：改版本、就绪检查、打包、演练是项目自己发布工具的事（在 DSH 插件项目里是 `dsh_plugin_release` 的 `version` / `check` / `pack` / `rehearse`，外加 `docs/RELEASE.md`）。这里只写工具不该编码的判断。
 
 ## 第一条：先分清自己在哪一段
 
@@ -26,8 +26,10 @@ Trusted Publisher 只能配在**已经存在**的包上，所以新包绕不过�
 
 ```bash
 npm login                      # 或环境变量里给 NODE_AUTH_TOKEN
+# 先跑项目自己的发版前自查；在 DSH 插件项目里是：
 node scripts/release.mjs check .
 node scripts/release.mjs publish . --yes    # 没有 provenance，这一步无法避免
+# 其它项目：npm publish --access public
 ```
 
 之后配信任（见下），再决定 token 留不留：**留着就一直用它发，删掉就切 OIDC**，两条都行。
@@ -67,7 +69,7 @@ npm trust revoke <包名> --id=<trust-id>                                # 撤�
 | 优点 | 任何账号立刻可用 | 没有长期密钥要轮换 |
 | 代价 | 长期有效，要记得换 | 依赖那次 `npm trust` 配置 |
 
-**永远不要让发布步骤因为「没 token」被跳过**——那会一路绿灯却没有版本发出去。这是本项目已经踩过的事故。
+**永远不要让发布步骤因为「没 token」被跳过**——那会一路绿灯却没有版本发出去。这个坑真的踩过。
 
 ## 版本与 dist-tag
 
