@@ -204,7 +204,7 @@ README 讲能力，这个文件讲**具体是哪个工具、什么参数、边�
 | `dsh-plugin-new` | 生成前问哪些字段、哪些决策归用户、报告里每条 warn 怎么处理 | 不写文件，不生成 |
 | `dsh-plugin-sandbox` | 用哪个沙盒、何时重建、测试阶梯、什么算「验过」、哪些验不到 | 不起实例（那是工具的事） |
 | `dsh-plugin-fix-error` | 按 `errors/` 卡片认领错误、跑规则拿坐标、修完怎么算验过 | 不写卡片正文（那是 `errors/` 的事） |
-| `npm-package-manager` | 账号与 registry 那一侧：首次引导、`npm trust` 配/查/撤销、token 与 OIDC 谁优先、dist-tag、`deprecate`、报错反查 | 不管打包与演练（`dsh_plugin_release` 的事） |
+| `dsh-plugin-npm` | 账号与 registry 那一侧：首次引导、`npm trust` 配/查/撤销、token 与 OIDC 谁优先、dist-tag、`deprecate`、报错反查 | 不管打包与演练（`dsh_plugin_release` 的事） |
 
 ## 回归脚本
 

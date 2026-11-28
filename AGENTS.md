@@ -91,7 +91,7 @@ dsh --profile iso-creator --host 127.0.0.1 --port 3099 --no-open
 | `lib/errors-card.js` | `errors/` 卡片的解析与完整性校验 | 源 |
 | `lib/repo.js` | 建仓库 / 对齐仓库：默认公开 + `dsh-plugin` topic；exec 可注入所以能测 | 源 |
 | `tools/index.js` | 工具定义与注册（7 个 `dsh_plugin_*` + `dsh_repo`） | 源 |
-| `skills/` | 4 个 skill：`dsh-plugin-new`、`dsh-plugin-sandbox`、`dsh-plugin-fix-error`、`npm-package-manager` | 源 |
+| `skills/` | 4 个 skill：`dsh-plugin-new`、`dsh-plugin-sandbox`、`dsh-plugin-fix-error`、`dsh-plugin-npm` | 源 |
 | `templates/bundle/` | 生成插件包的模板 + `recipe.json` 方案 | 源 |
 | `docs/contracts/tools.json` | 工具契约的**生成物** | `scripts/gen-tools-contract.mjs` |
 | `templates/bundle/github-release.yml.tpl` | CI 工作流的**生成物** | `.github/workflows/release.yml` |
