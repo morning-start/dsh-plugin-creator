@@ -41,7 +41,7 @@ check → pack → publish → release → verify(advisory)
 - **版本↔标签只在推标签那一刻对账**。本地永远不知道你要打什么 tag。
 - **并发只有 `concurrency` 能挡**。两个 tag 推得近，两个 run 同时 publish，后完成的会把 `latest` 覆盖回旧版本。
 
-`node scripts/release.mjs check .` 仍然要做，但它是**发版前的自查**（打 tag 之前跑），不是发版动作。完整说明见 [`errors/release-pipeline.md`](../errors/release-pipeline.md)。
+`node scripts/release.mjs check .` 仍然要做，但它是**发版前的自查**（打 tag 之前跑），不是发版动作。
 
 这条流程由 `release:pipeline` 规则守着——workflow 丢了 tag 触发器、少了版本对账、少了 publish / Release 步骤、或者没有 concurrency group，检查就会红：
 
@@ -191,6 +191,16 @@ dsh plugin --profile <profile> add <name>@<上一版版本>
 ```
 
 回滚后**按同一判据复查**：`--dump-config` 有那一行、没有激活失败、界面/工具回到旧行为。
+
+## 6.5 手工发过之后怎么补救
+
+已经绕过 CI 发过一次，按这三种情况处理：
+
+| 情况 | 怎么办 |
+|---|---|
+| **包发了，`latest` 指错了** | 不要重发同一版本（`npm publish` 会 403）。在含幂等修复的提交上跑 `gh workflow run release.yml --ref vX.Y.Z`——publish 那步会退化成 `npm dist-tag add <pkg>@<ver> latest`，把 `latest` 摆正后继续建 Release |
+| **版本号错了** | 改 `package.json` → 提交 → 打**新**标签。**不要移动旧标签**：标签一旦被消费（Release 已建、包已发），移动它会让「这个标签指向什么」变得不可信 |
+| **发出去的包没有 provenance** | 无法补。下一代版本走 CI 就会有，已经发出的那一个改不了 |
 
 ## 7. 发布后对账
 

@@ -146,9 +146,11 @@ markdown 里的**相对链接**必须解析得到。跳过 `http(s)://`、`mailt
 
 另外三条：`id` 必须等于文件名、`severity` 只能是 `fatal` / `broken` / `noisy`、`check` 必须指向一个**真实存在**的规则类型（写 `none` 要另作说明）。
 
+`matches` 还有一条硬要求：**必须是系统真的会打印的原文**。写成中文描述（`"插件起不来"`）会报红——描述搜不到，原文才搜得到。这也是防止把**流程**塞进 `errors/` 的最便宜的一道闸：流程没有系统原文，只能写成描述。
+
 `README.md` 被当作目录文档跳过；正文不参与检查——**卡片是索引，正文是解释**，规则只管索引完整。
 
-详见 [`errors/README.md`](../errors/README.md)。
+什么该进 `errors/`、什么该进 `docs/`，见 [`AGENTS.md`](../AGENTS.md) 的归属表和 [`errors/README.md`](../errors/README.md)。
 
 ### `template-variants`
 
@@ -186,7 +188,7 @@ markdown 里的**相对链接**必须解析得到。跳过 `http(s)://`、`mailt
 
 只管**链路在不在**，不管这次发版对不对——版本↔标签的对账在 CI 里跑（`release:tag` 只能在 HEAD 已有 tag 时比）。
 
-详见 [`errors/release-pipeline.md`](../errors/release-pipeline.md)。
+流程本身与补救办法见 [`docs/RELEASE.md`](RELEASE.md)；这条规则不是「错误归档」，它是**流程的守门人**。
 
 ### 通用规则（与方案引擎共用）
 

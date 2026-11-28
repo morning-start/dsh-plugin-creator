@@ -366,6 +366,12 @@ try {
   const withReadme = await runRules(cardRoot, cardRule)
   check('README.md is documentation, not a card', withReadme.checks[0].status === 'pass', withReadme.checks[0].message)
 
+  // A description cannot be searched for; matches has to quote the message.
+  writeFileSync(join(cardRoot, 'errors', 'demo-error.md'), fullCard().replace('  - "demo error text"\n', '  - "插件起不来"\n'))
+  const described = await runRules(cardRoot, cardRule)
+  check('a matches entry written as a description fails', described.checks[0].status === 'fail', described.checks[0].message)
+  check('the finding asks for the real message', /quote the message/.test(described.checks[0].message), described.checks[0].message)
+
   console.log('\ntemplate variants')
   const tplRoot = join(work, 'templates')
   mkdirSync(join(tplRoot, 'bundle'), { recursive: true })

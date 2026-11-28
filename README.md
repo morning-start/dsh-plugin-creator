@@ -176,6 +176,8 @@ tools/index.js        预设作用域半边：工具与安装守卫
 lib/bundle-check.js   结构检查器（隐私与安全两组也在里面）
 lib/generate.js       通用模板引擎（recipe → 文件 → 规则）
 lib/rules.js          声明式结构检查
+lib/rule-types.js     规则类型清单（检查器与卡片校验共用）
+lib/errors-card.js    errors/ 卡片的解析与完整性校验
 lib/scaffold.js       bundle 方案（derive 钩子 + 深度检查）
 lib/sandbox.js        沙盒引擎（工具与 CLI 共用）
 lib/ui.js             CDP 客户端与无头浏览器（工具与 CLI 共用）
@@ -185,7 +187,8 @@ lib/ship.js           ship：一条命令跑完整个发布顺序
 lib/adopt.js          规范化已有插件：审计、计划、只补标准件
 lib/market.js         插件市场条目：生成、校验、仓库状态
 templates/bundle/     bundle 方案：recipe.json + 每个变体一个模板
-skills/               挂进创造模式的 skill
+skills/               挂进创造模式的 skill（new / sandbox / fix-error 三个）
+errors/               已知错误：卡片（六字段）+ 正文，一条一个文件
 locale/{en,zh}.json   Plugin Manager 的标题 / 说明 / 详情路径
 market.json           插件市场那一行（声明，不是自动截断）
 docs/                 设计文档 + 详情页
@@ -193,6 +196,8 @@ icon.svg              插件图标
 scripts/              CLI 与回归检查（adopt.mjs 规范化已有项目）
 .github/workflows/    tag 触发的发版工作流（生成的插件包也带一份）
 ```
+
+**改这个仓库之前先读 [`AGENTS.md`](AGENTS.md)**：它写明「什么内容该放哪个目录」（流程 → `docs/`，踩过的坑 → `errors/`，运行期事故 → `incidents.md`）、哪些是生成物不许手改、以及十条硬约束。
 
 ## 验证
 

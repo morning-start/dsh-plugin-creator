@@ -23,11 +23,37 @@ node scripts/list-errors.mjs --json                   # 机器可读
 
 过滤同时匹配 `id`、`name`、`title` 和 `matches`，所以**把报错里最稳定的一段丢进去**就行——别用行号、路径、seq 这种每台机器都不同的部分。
 
+## 什么该进 `errors/`，什么不该
+
+**这里放的是「错误」，不是「规范」。** 一条坑要进来，四条**同时**成立：
+
+1. **是一个错误**：有人做错了某件具体的事，导致可观察的故障。
+2. **有系统原文**：`matches` 能写出来——报错在日志里能被搜到。
+3. **有用户可见后果**：能说清用户看到什么（「插件没反应」「会话打不开」）。
+4. **能写成静态检查**：`check` 指向一条真实存在的规则类型。
+
+任何一条不成立，就不该进这里：
+
+| 你手上的东西 | 该放哪儿 | 为什么 |
+|---|---|---|
+| 流程、规范、约定（怎么发版、怎么提交、怎么写清单） | `docs/` | 这是「应该怎么做」，不是「做错了什么」 |
+| 环境事故、运行时崩溃、端口冲突、渲染问题 | `skills/*/references/incidents.md` | 静态扫不出来，只能按现象反查 |
+| 风格偏好、最佳实践 | `docs/` 或不写 | 没有故障现象，也没有判据 |
+| 一次性的调试记录 | 哪儿都不放 | 没有第二次价值 |
+
+**反面教材，记在这里免得再犯**：`release-pipeline`（「发版只走 tag」）曾经被塞进 `errors/`。它确实有一条检查，但它的内容是**流程**——「发版应该怎么做」。流程的说明书属于 [`docs/RELEASE.md`](../docs/RELEASE.md)，规则的说明属于 [`docs/CHECKS.md`](../docs/CHECKS.md)。`errors/` 只回答「我踩了什么、怎么认出来、怎么修」。
+
+判断标准一句话：**卡片里能写出 `matches`（系统原文）吗？写不出来就不是这个目录的。**
+
+这条标准有一半是机械执行的：`errors:cards` 规则要求 `matches` 每条都是**英文原文**（系统打印的语言），写成中文描述会直接报红。流程没有系统原文，只能写成描述——所以它过不了这道闸。
+
+完整的归属表（流程 / 错误 / 事故 / 判断 / 规则 / 工具 / 模板分别放哪儿）在 [`AGENTS.md`](../AGENTS.md)。
+
 ## 为什么要有这个目录
 
 文档里的「注意不要……」没有人会读第二遍；code review 会漏；测试跑得通的东西不代表用户打开时不会炸。**只有变成一条会自己跑的检查，才算真的防住了。**
 
-所以这里的每一条都必须能被 `checks.json` 引用、被 `check-project` 执行。写不出一条检查的条目，说明还没想清楚触发条件，先别写进来。
+所以这里的每一条都必须能被 `checks.json` 引用、被 `check-project` 执行。
 
 ## 文件格式
 
@@ -106,7 +132,6 @@ node scripts/check-project.mjs                           # 全跑
 | [undeclared-inject](undeclared-inject.md) | broken | `undeclared-inject` | 第一个插件 · 常见坑 |
 | [bare-name-dependency](bare-name-dependency.md) | broken | `bare-name-dependency` | 插件解剖 · 依赖解析 |
 | [custom-session-event](custom-session-event.md) | broken | `custom-session-event` | 监听事件 · 双事件平面 |
-| [release-pipeline](release-pipeline.md) | broken | `release-pipeline` | 真实事故（并发发版把 latest 弄反） |
 
 后四条来自官方文档 <https://deepseekdocs.com/docs/learn> 的「插件解剖 / 第一个插件 / 监听事件」等篇目里点名的硬性约束——文档写了「会踩」，这里把它变成会自己跑的检查。
 
