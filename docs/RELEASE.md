@@ -248,6 +248,17 @@ OIDC 那条路的一次性设置（**每个包一次**）：npmjs.com → 这个
 
 **没配好之前，tokenless 发布是直接认证失败**，不会静默成功。配了 token 就绕开这个前提——这也是它作为第一顺位的原因：新包、新账号、临时环境都能立刻发。
 
+配信任用 CLI 就行（比去网页点表单可靠，且能写进脚本）：
+
+```bash
+npm trust github <包名> --file release.yml --allow-publish \
+  --registry https://registry.npmjs.org --dry-run   # 先看，再去掉 --dry-run
+npm trust list <包名>          # 核对
+npm trust revoke <包名> --id=<id>   # 轮换/改名时用
+```
+
+账号与 registry 那一侧的判断（信任关系、token 与 OIDC 的取舍、dist-tag、`deprecate` 代替 `unpublish`、各种 npm 报错的原因）在 [`skills/dsh-plugin-npm/SKILL.md`](../skills/dsh-plugin-npm/SKILL.md)。
+
 什么时候才需要 token：用不了 OIDC 的时候（私有 registry、self-hosted runner）。那时才加 `NPM_TOKEN` secret，并接受它是长期有效的、需要轮换——能不用就别用。
 
 ## 5. 装到真实 profile

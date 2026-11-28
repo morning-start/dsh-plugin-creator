@@ -55,7 +55,7 @@ plugin_manager  action: install_bundle  target: <这个检出的路径>
 
 **把条目提交到插件市场** —— 市场要的是一个 YAML 文件，条目由包生成而不是手写：`url` 和 `name` 来自 `git remote`（所以不可能指向别的仓库），那一行来自 `market.json`（因为它是会被维护者对着代码核对的**声明**，不能自动截断）。发布规则先在本地跑一遍——文件名 slug、分类取值、单行以句号结尾、`: ` 要加引号、图标必须位图、tarball 的 `latest/download/` 会烂——再由 `gh` 补上只有 GitHub 能回答的两条（仓库满 1 天、`dsh-plugin` topic）。见 [docs/RELEASE.md](docs/RELEASE.md)。
 
-**判断放在该放的地方** —— 三个 skill 承载工具不该编码的东西：生成前该问什么、怎么测一个插件而不产出假证据，以及**按卡片修错**（先认领是哪一类，再改，最后在真实宿主里验）。
+**判断放在该放的地方** —— 四个 skill 承载工具不该编码的东西：生成前该问什么、怎么测一个插件而不产出假证据、**按卡片修错**（先认领是哪一类，再改，最后在真实宿主里验），以及 **npm 那一侧的事**（信任关系、凭据、dist-tag、弃用、对账）。
 
 ## 快速开始
 
@@ -202,7 +202,7 @@ scripts/              CLI 与回归检查（adopt.mjs 规范化已有项目）
 ## 验证
 
 1. `dsh --profile desktop --dump-config` 里能看到 `creator-host` 行，以及一个插件列表以 `creator-tools`、`creator-skills` 结尾的 `preset-cordis`。
-2. **新开**一个创造模式会话，工具列表里有本包的工具，skill 列表里有 `dsh-plugin-new`、`dsh-plugin-sandbox`、`dsh-plugin-fix-error`。
+2. **新开**一个创造模式会话，工具列表里有本包的工具，skill 列表里有 `dsh-plugin-new`、`dsh-plugin-sandbox`、`dsh-plugin-fix-error`、`dsh-plugin-npm`。
 3. 新开一个标准模式会话，一个都没有。
 4. 对本仓库跑 `node scripts/check-project.mjs .`，5 条规则全过。
 
