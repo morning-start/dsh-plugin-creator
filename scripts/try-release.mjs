@@ -115,8 +115,19 @@ try {
 
   console.log('\npacker surface')
   const surface = packSurface(repo)
-  check('a packer answered', surface.source === 'pnpm' || surface.source === 'npm', surface.source)
-  check('the surface includes the manifest', surface.files.includes('package.json'), JSON.stringify(surface.files.slice(0, 5)))
+  // A container without a packer is a legitimate state: `check` then reports the
+  // surface as approximate instead of guessing. What must never happen is an
+  // approximation presented as the real thing — so assert the label, not the
+  // presence of a packer, and print why a packer declined if it did.
+  check('the surface names its source',
+    ['pnpm', 'npm', 'files-field'].includes(surface.source),
+    `${surface.source} ${JSON.stringify(surface.attempts ?? [])}`)
+  check('an approximation is labelled as one',
+    surface.source !== 'files-field' || surface.approximate === true,
+    JSON.stringify(surface.attempts ?? []))
+  check('the surface includes the manifest',
+    surface.files.includes('package.json') || surface.source === 'files-field',
+    `${JSON.stringify(surface.files.slice(0, 5))} ${JSON.stringify(surface.attempts ?? [])}`)
   check('the surface excludes tmp', surface.files.every(file => !file.startsWith('tmp/')), JSON.stringify(surface.files.filter(file => file.startsWith('tmp/'))))
   check('the surface has a size', typeof surface.totalSize === 'number')
 
