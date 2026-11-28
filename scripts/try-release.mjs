@@ -3,10 +3,10 @@
 //
 //   node scripts/try-release.mjs
 
-import { mkdirSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { createGithubRelease, inspectRelease, packSurface, parseVersion, publishRelease, satisfies, verifyPublished } from '../lib/release.js'
+import { bumpVersion, createGithubRelease, inspectRelease, packSurface, parseVersion, publishRelease, satisfies, verifyPublished } from '../lib/release.js'
 import { shipRelease } from '../lib/ship.js'
 
 const repo = fileURLToPath(new URL('..', import.meta.url))
@@ -161,6 +161,59 @@ try {
 
   const dryShip = await shipRelease(shipDir, { ...deps, dryRun: true, publisher: () => ({ ok: true, dryRun: true, output: '' }), releaseCreator: () => ({ ok: true, dryRun: true, command: 'gh release create v2.0.0' }) })
   check('a dry run reports both steps as dry', dryShip.ok === true && dryShip.steps.find(step => step.step === 'publish')?.detail.includes('dry run'))
+
+  console.log('\nversion bump (step 1 of the fixed flow)')
+  const bumpDir = join(work, 'bump')
+  mkdirSync(bumpDir, { recursive: true })
+  const writeManifest = (version) => writeFileSync(join(bumpDir, 'package.json'), `${JSON.stringify({ name: 'dsh-plugin-bump', version }, null, 2)}\n`)
+  const readVersion = () => JSON.parse(readFileSync(join(bumpDir, 'package.json'), 'utf8')).version
+  const refusal = (run) => {
+    try {
+      run()
+    } catch (error) {
+      return error.message
+    }
+    return ''
+  }
+
+  writeManifest('1.2.3')
+  const patched = bumpVersion(bumpDir, { part: 'patch' })
+  check('patch bumps the last component', patched.version === '1.2.4' && readVersion() === '1.2.4', `${patched.version} / file ${readVersion()}`)
+  check('the previous version is reported', patched.previous === '1.2.3', patched.previous)
+  check('it prints the tag command', patched.steps.some(step => step === 'git tag v1.2.4'), JSON.stringify(patched.steps))
+  check('it says CI publishes', patched.steps.some(step => /CI publishes/.test(step)), JSON.stringify(patched.steps))
+
+  const minorBump = bumpVersion(bumpDir, { part: 'minor' })
+  check('minor zeroes the patch', minorBump.version === '1.3.0', minorBump.version)
+  const majorBump = bumpVersion(bumpDir, { part: 'major' })
+  check('major zeroes minor and patch', majorBump.version === '2.0.0', majorBump.version)
+
+  writeManifest('1.0.0')
+  check('an explicit version is accepted', bumpVersion(bumpDir, { version: '1.5.2' }).version === '1.5.2')
+  check('a downgrade is refused', /must be greater/.test(refusal(() => bumpVersion(bumpDir, { version: '0.9.0' }))), 'no refusal')
+  check('the same version is refused', /must be greater/.test(refusal(() => bumpVersion(bumpDir, { version: '1.5.2' }))), 'no refusal')
+  check('a non-semver target is refused', /not a semver/.test(refusal(() => bumpVersion(bumpDir, { version: 'next' }))), 'no refusal')
+  check('an unknown part is refused', /patch, minor, or major/.test(refusal(() => bumpVersion(bumpDir, { part: 'huge' }))), 'no refusal')
+
+  writeManifest('not-a-version')
+  check('a non-semver current version is refused', /is not semver/.test(refusal(() => bumpVersion(bumpDir, {}))), 'no refusal')
+
+  // The manifest must stay reviewable: two-space JSON with a trailing newline,
+  // so the diff is one line rather than the whole file.
+  writeManifest('3.1.4')
+  bumpVersion(bumpDir, { part: 'patch' })
+  const manifestText = readFileSync(join(bumpDir, 'package.json'), 'utf8')
+  check('the manifest keeps npm\'s shape', manifestText.endsWith('}\n') && /^\{\n {2}"name"/.test(manifestText), JSON.stringify(manifestText.slice(0, 20)))
+
+  // A version that already has a tag must not be re-tagged: moving a tag makes
+  // what it points at untrustworthy.
+  writeManifest('2.0.0')
+  const { spawnSync } = await import('node:child_process')
+  spawnSync('git init -q', { cwd: bumpDir, shell: true })
+  spawnSync('git -c user.email=a@b -c user.name=a commit -q --allow-empty -m init', { cwd: bumpDir, shell: true })
+  spawnSync('git tag v2.0.1', { cwd: bumpDir, shell: true })
+  check('an existing tag is refused', /already exists/.test(refusal(() => bumpVersion(bumpDir, { part: 'patch' }))), 'no refusal')
+  check('an untagged version still bumps', bumpVersion(bumpDir, { part: 'minor' }).version === '2.1.0')
 
   console.log('\npublishing')
   const publishable = join(work, 'publishable')

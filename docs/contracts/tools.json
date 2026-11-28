@@ -357,22 +357,36 @@
     },
     {
       "name": "dsh_plugin_release",
-      "description": "Prepare a plugin package for release. `check` reports what the packer would ship, whether the running DSH satisfies the package's engines/peer requirement, and what blocks a registry publish. `pack` writes the tarball. `rehearse` packs, installs it into a sandbox, and reads the composed config back — the only check that proves it installs and activates, plus the rollback command. It never publishes.",
+      "description": "Prepare a plugin package for release. `version` moves package.json's version and prints the commit / tag / push commands — the only action that writes to the project. `check` reports what the packer would ship, whether the running DSH satisfies the package's engines/peer requirement, and what blocks a registry publish. `pack` writes the tarball. `rehearse` packs, installs it into a sandbox, and reads the composed config back — the only check that proves it installs and activates, plus the rollback command. Nothing here publishes: in a project generated from this toolkit, pushing the tag is what publishes, in CI.",
       "parameters": {
         "type": "object",
         "properties": {
           "action": {
             "type": "string",
             "enum": [
+              "version",
               "check",
               "pack",
               "rehearse"
             ],
-            "description": "check readiness; pack the tarball; or rehearse installing it in a sandbox."
+            "description": "version: step 1 of the release flow, bumps package.json and prints the next commands; check readiness; pack the tarball; or rehearse installing it in a sandbox."
           },
           "path": {
             "type": "string",
             "description": "The package directory (the folder holding package.json). Absolute."
+          },
+          "part": {
+            "type": "string",
+            "enum": [
+              "patch",
+              "minor",
+              "major"
+            ],
+            "description": "For version: which component to bump. Defaults to patch; ignored when version is given."
+          },
+          "version": {
+            "type": "string",
+            "description": "For version: an explicit target such as 1.4.0 instead of a bump part."
           },
           "outDir": {
             "type": "string",

@@ -171,6 +171,16 @@ try {
     check(`${label}: the starter checks pass`, starter.ok === true, JSON.stringify(starter.checks.filter(item => item.status !== 'pass')))
     check(`${label}: the zh variant declares locale parity`,
       values.titleZh === undefined ? starter.ran === 10 : starter.ran === 11, `${starter.ran} rules ran`)
+    // The release standard has to arrive with the project, not live only in the
+    // toolkit: the four steps, and a pipeline that stores no registry token.
+    const readme = readFileSync(join(dest, 'README.md'), 'utf8')
+    check(`${label}: the README carries the four release steps`,
+      ['git tag v', 'git push origin', 'Trusted Publisher', 'release.yml'].every(marker => readme.includes(marker)),
+      readme.slice(readme.indexOf('## Releasing'), readme.indexOf('## Next steps')).slice(0, 200))
+    const workflow = readFileSync(join(dest, '.github', 'workflows', 'release.yml'), 'utf8')
+    check(`${label}: the shipped workflow stores no registry token`, !/NPM_TOKEN|NODE_AUTH_TOKEN/.test(workflow))
+    check(`${label}: the shipped workflow is tag-triggered with OIDC`,
+      /tags: \['v\*'\]/.test(workflow) && /id-token: write/.test(workflow))
   }
 
   const walked = await walk(join(work, 'out'))

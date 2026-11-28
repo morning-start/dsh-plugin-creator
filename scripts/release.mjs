@@ -22,7 +22,7 @@
 
 import { readFileSync, writeFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
-import { createGithubRelease, inspectRelease, packRelease, publishRelease, rehearseRelease, verifyPublished } from '../lib/release.js'
+import { bumpVersion, createGithubRelease, inspectRelease, packRelease, publishRelease, rehearseRelease, verifyPublished } from '../lib/release.js'
 import { shipRelease } from '../lib/ship.js'
 
 function flag(name) {
@@ -55,6 +55,23 @@ async function main() {
   const directory = target()
 
   switch (command) {
+    case 'version': {
+      // `version [dir] [patch|minor|major|X.Y.Z]` — both are optional and in
+      // either order, so find the bump by shape rather than by position.
+      const positional = process.argv.slice(3).filter(argument => !argument.startsWith('--'))
+      const bump = positional.find(argument => /^(patch|minor|major|\d+\.\d+\.\d+)$/.test(argument))
+      const dirArg = positional.find(argument => argument !== bump)
+      const where = resolve(dirArg === undefined ? process.cwd() : dirArg)
+      const result = bumpVersion(where, /^(patch|minor|major)$/.test(bump ?? '')
+        ? { part: bump }
+        : bump === undefined ? {} : { version: bump })
+      console.log(`${where}`)
+      console.log(`${result.previous} -> ${result.version}`)
+      console.log('\nNext:')
+      for (const step of result.steps) console.log(`  ${step}`)
+      return
+    }
+
     case 'check': {
       const report = await inspectRelease(directory, { dshVersion: flag('--dsh-version') })
       printCheck(report)
@@ -194,6 +211,9 @@ async function main() {
 
   node scripts/release.mjs ship [dir] [--yes] [--dry-run] [--skip-npm] [--draft] [--wait 300]
                                                        check -> pack -> publish -> release -> verify (advisory)
+  node scripts/release.mjs version [dir] [patch|minor|major|X.Y.Z]
+                                                       step 1 of the fixed flow: move package.json's version,
+                                                       then print the commit / tag / push commands
   node scripts/release.mjs check [dir]                  what ships, and does DSH accept it
   node scripts/release.mjs pack [dir] [--out <dir>]     write the tarball
   node scripts/release.mjs rehearse [dir] [--sandbox rollback] [--project <dir>]

@@ -14,7 +14,7 @@ README 讲能力，这个文件讲**具体是哪个工具、什么参数、边�
 | 拦住开发中插件的本地安装 | 安装守卫（不是工具，见下） | — |
 | 沙盒测试（建 / 起 / 探 / 停 / 清） | `dsh_sandbox` + 技能 `dsh-plugin-sandbox`（负责判断） | `scripts/sandbox.mjs` |
 | 看页面 / 断言 / 真实点击 | `dsh_plugin_ui` | `scripts/ui.mjs` |
-| 发版（就绪检查 / 打包 / 沙盒演练） | `dsh_plugin_release` | `scripts/release.mjs` |
+| 发版（改版本 / 就绪检查 / 打包 / 沙盒演练） | `dsh_plugin_release` | `scripts/release.mjs` |
 | 发布之后：一条命令跑完 check → pack → publish → release → verify | — | `scripts/release.mjs ship` |
 | 发布之后：单步 npm 发布 / 传播核对 / GitHub Release / 市场条目 | —（只走 CLI，因为都在推送之后） | `scripts/release.mjs publish\|verify\|gh-release\|market` |
 | 按方案生成任意结构化内容 | `dsh_plugin_new` 的 `recipe` 参数 | `scripts/new-bundle.mjs --recipe` |
@@ -153,10 +153,11 @@ README 讲能力，这个文件讲**具体是哪个工具、什么参数、边�
 
 ### `dsh_plugin_release`
 
-发版就绪检查、打包、沙盒演练。**不发布**（不跑 `npm publish`）。
+发版就绪检查、改版本、打包、沙盒演练。**不发布**（发版只由推 tag 触发，由 CI 跑）。
 
 | `action` | 参数 | 作用 |
 |---|---|---|
+| `version` | `path`、`part?`（`patch`/`minor`/`major`，默认 `patch`）、`version?` | 固定流程的第 1 步：改 `package.json` 的版本，并打印后面的 commit / tag / push 命令。**唯一会写项目的动作**。拒绝降级、拒绝重复、拒绝当前版本不是 semver，也拒绝一个已有 `v*` tag 的版本（移动 tag 会让它指向什么变得不可信） |
 | `check` | `path`、`dshVersion?` | 问打包器真实会装进 tarball 的文件（`pnpm pack --dry-run --json`，退 `npm`，再退按 `files` 近似并标注），并拿 `dsh --version` 与 `engines.dsh`（没有就看 `@deepseek-ai/dsh` 依赖）比对 |
 | `pack` | `path`、`outDir?` | 写 tarball，默认 `tmp/release/` |
 | `rehearse` | `path`、`sandbox?`（默认 `rollback`）、`project?` | 建/复用沙盒 → 打包 → 把 **tarball** 装进沙盒 profile → `--dump-config` 读回，返回回滚命令 |
@@ -164,6 +165,8 @@ README 讲能力，这个文件讲**具体是哪个工具、什么参数、边�
 检查项：`release:manifest` / `name` / `description` / `version` / `entry` / `patch` / `private`（warn）/ `compatibility` / `surface` / `size`（warn）/ `contents`。
 
 **边界**：不发布、不验 registry 权限、semver 只支持 `^` `~` `>=` `<=` `>` `<` `=` `||`（不处理 `*` / `x` / 范围）、不验客户端渲染。步骤与判据见 [`RELEASE.md`](RELEASE.md)。
+
+`version` 只改 `package.json`，**不做 git 操作**：提交、打 tag、推送各自可见且可回退，而 publish 不可回退，所以它们不该被合成一条命令。
 
 ## 守卫（不是工具）
 `ctx.tools.guard()`，在调用**执行前**拒绝，不占用任何工具位。拒绝这两种：

@@ -98,7 +98,7 @@ const projectReport = await project.execute({ path: repo }, {})
 if (projectReport.ok !== true) {
   // dsh_plugin_adopt: a plan on this repository must find nothing to write, and
   // must not have written anything.
-  const adopt = tools.get('dsh_plugin_adopt')
+  const adopt = registered.get('dsh_plugin_adopt')
   const adoptPlan = await adopt.execute({ path: repo })
   if (adoptPlan.mode !== 'plan') throw new Error(`dsh_plugin_adopt defaulted to ${adoptPlan.mode}, expected plan`)
   if (adoptPlan.applied.length !== 0) throw new Error(`dsh_plugin_adopt applied ${adoptPlan.applied.length} change(s) in plan mode`)

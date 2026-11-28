@@ -7,14 +7,16 @@
 **不要手打 `npm publish`，不要手建 GitHub Release。** 发版只有一个动作：推一个 `v*` 标签。
 
 ```powershell
-# 1. 改版本号——这是唯一需要手改的地方
-node -e "const p=require('./package.json');p.version='0.5.0';require('fs').writeFileSync('package.json',JSON.stringify(p,null,2)+'\n')"
+# 1. 改版本号——这是唯一需要手改 package.json 的地方，也可以用工具改
+dsh_plugin_release { action: 'version', path: '.', part: 'patch' }
+#    （等价于手改 package.json 的 version；工具会顺带打印下面三条命令）
+
 git add package.json
 git commit -m "chore(release): 0.5.0"
 
-# 2. 推代码，再推标签——推标签这一下就是发版
-git push origin main
+# 2. 打 tag，3. 推代码 + 推 tag——推 tag 这一下就是发版
 git tag v0.5.0
+git push origin main
 git push origin v0.5.0
 ```
 

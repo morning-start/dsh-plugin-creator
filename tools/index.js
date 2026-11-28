@@ -20,7 +20,7 @@ import { inspectBundle } from '../lib/bundle-check.js'
 import { applyAdoption, auditProject, planAdoption } from '../lib/adopt.js'
 import { scaffold } from '../lib/scaffold.js'
 import { Sandboxes } from '../lib/sandbox.js'
-import { inspectRelease, packRelease, rehearseRelease } from '../lib/release.js'
+import { bumpVersion, inspectRelease, packRelease, rehearseRelease } from '../lib/release.js'
 import { openPage, runAssertions, stopChrome } from '../lib/ui.js'
 import { RULE_TYPES, runProjectChecks } from '../lib/checks.js'
 
@@ -542,16 +542,22 @@ function pluginNew(defaultDirectory) {
 const releaseTool = {
   name: 'dsh_plugin_release',
   description:
-    'Prepare a plugin package for release. `check` reports what the packer would ship, whether the running DSH satisfies the package\'s engines/peer requirement, and what blocks a registry publish. `pack` writes the tarball. `rehearse` packs, installs it into a sandbox, and reads the composed config back — the only check that proves it installs and activates, plus the rollback command. It never publishes.',
+    'Prepare a plugin package for release. `version` moves package.json\'s version and prints the commit / tag / push commands — the only action that writes to the project. `check` reports what the packer would ship, whether the running DSH satisfies the package\'s engines/peer requirement, and what blocks a registry publish. `pack` writes the tarball. `rehearse` packs, installs it into a sandbox, and reads the composed config back — the only check that proves it installs and activates, plus the rollback command. Nothing here publishes: in a project generated from this toolkit, pushing the tag is what publishes, in CI.',
   parameters: {
     type: 'object',
     properties: {
       action: {
         type: 'string',
-        enum: ['check', 'pack', 'rehearse'],
-        description: 'check readiness; pack the tarball; or rehearse installing it in a sandbox.',
+        enum: ['version', 'check', 'pack', 'rehearse'],
+        description: 'version: step 1 of the release flow, bumps package.json and prints the next commands; check readiness; pack the tarball; or rehearse installing it in a sandbox.',
       },
       path: { type: 'string', description: 'The package directory (the folder holding package.json). Absolute.' },
+      part: {
+        type: 'string',
+        enum: ['patch', 'minor', 'major'],
+        description: 'For version: which component to bump. Defaults to patch; ignored when version is given.',
+      },
+      version: { type: 'string', description: 'For version: an explicit target such as 1.4.0 instead of a bump part.' },
       outDir: { type: 'string', description: 'For pack: where to write the tarball. Defaults to <path>/tmp/release.' },
       sandbox: { type: 'string', description: 'For rehearse: sandbox name to install into. Defaults to "rollback".' },
       dshVersion: { type: 'string', description: 'For check: the DSH version to test compatibility against. Defaults to `dsh --version`.' },
@@ -591,6 +597,19 @@ const releaseTool = {
           : `${report.package.name}@${report.package.version} has no blocking problem; next: action "pack", then "rehearse".`)
       }
       return { action, ok: report.ok, summary: lines.join('\n'), data: report }
+    }
+
+    if (action === 'version') {
+      const part = args.part === undefined ? { part: 'patch' } : { part: String(args.part) }
+      const result = bumpVersion(path, args.version === undefined ? part : { version: String(args.version) })
+      const lines = [
+        `${path}`,
+        `${result.previous} -> ${result.version}`,
+        '',
+        'Next (the CI does the publish once the tag is pushed):',
+        ...result.steps.map(step => `  ${step}`),
+      ]
+      return { action, ok: true, summary: lines.join('\n'), data: result }
     }
 
     if (action === 'pack') {
