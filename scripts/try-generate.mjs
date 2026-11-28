@@ -183,9 +183,14 @@ try {
     check(`${label}: the README explains the first local publish`,
       /first publish has to be local/i.test(readme) && /npm login/.test(readme))
     const workflow = readFileSync(join(dest, '.github', 'workflows', 'release.yml'), 'utf8')
-    check(`${label}: the shipped workflow stores no registry token`, !/NPM_TOKEN|NODE_AUTH_TOKEN/.test(workflow))
+    // A token is allowed, requiring one is not: a step gated on the secret would
+    // silently stop publishing for anyone who never configured it.
+    check(`${label}: the shipped workflow never gates publishing on a token`,
+      !/^\s*if:.*(?:NPM_TOKEN|NODE_AUTH_TOKEN)/m.test(workflow), workflow.split('\n').filter(line => /if:/.test(line)).join(' | '))
     check(`${label}: the shipped workflow is tag-triggered with OIDC`,
       /tags: \['v\*'\]/.test(workflow) && /id-token: write/.test(workflow))
+    check(`${label}: the shipped workflow does not pipe npm publish`,
+      !/(?:npm|pnpm)\s+publish[^\n]*\|[^\n]*/.test(workflow.split('\n').filter(line => !/^\s*#/.test(line)).join('\n')))
   }
 
   const walked = await walk(join(work, 'out'))

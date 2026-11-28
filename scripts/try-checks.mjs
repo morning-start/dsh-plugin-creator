@@ -473,19 +473,33 @@ try {
   check('a workflow without a concurrency group fails', noConcurrency.checks[0].status === 'fail', noConcurrency.checks[0].message)
   check('the finding names the race', /race/.test(noConcurrency.checks[0].message), noConcurrency.checks[0].message)
 
-  // A long-lived registry token in the repository is the thing trusted
-  // publishing exists to remove; the pipeline must not depend on one.
+  // A stored token is allowed; requiring it is not. A step gated on the secret
+      // silently stops publishing when the secret is absent.
   writeFileSync(join(releaseRoot, '.github', 'workflows', 'release.yml'), workflow({
-    permissions: 'permissions:\n  contents: write\n  id-token: write\n',
-    publish: '      - name: Publish\n        env:\n          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}\n        run: npm publish --provenance\n',
+    publish: '      - name: Publish\n        if: env.NPM_TOKEN != \'\'\n        env:\n          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}\n        run: npm publish --provenance\n',
   }))
-  const storedToken = await runRules(releaseRoot, releaseRule)
-  check('a workflow that reads a stored registry token fails', storedToken.checks[0].status === 'fail', storedToken.checks[0].message)
-  check('the finding points at trusted publishing', /trusted publishing/.test(storedToken.checks[0].message), storedToken.checks[0].message)
+  const gatedToken = await runRules(releaseRoot, releaseRule)
+  check('a publish step gated on a stored token fails', gatedToken.checks[0].status === 'fail', gatedToken.checks[0].message)
+  check('the finding says a missing secret would skip publishing', /silently stops publishing/.test(gatedToken.checks[0].message), gatedToken.checks[0].message)
+
+  writeFileSync(join(releaseRoot, '.github', 'workflows', 'release.yml'), workflow({
+    publish: '      - name: Publish\n        env:\n          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}\n        run: |\n          if [ -n "$NPM_TOKEN" ]; then export NODE_AUTH_TOKEN="$NPM_TOKEN"; fi\n          npm publish --provenance\n',
+  }))
+  const tokenThenOidc = await runRules(releaseRoot, releaseRule)
+  check('a token used as a preference with an OIDC fallback passes', tokenThenOidc.checks[0].status === 'pass', tokenThenOidc.checks[0].message)
 
   writeFileSync(join(releaseRoot, '.github', 'workflows', 'release.yml'), workflow({ permissions: 'permissions:\n  contents: write\n' }))
   const noOidc = await runRules(releaseRoot, releaseRule)
   check('a workflow without id-token: write fails', noOidc.checks[0].status === 'fail', noOidc.checks[0].message)
+
+  // `npm publish | tee log` reports tee's status: a failed publish looks like a
+  // success, and the run goes on to create a release nobody can install.
+  writeFileSync(join(releaseRoot, '.github', 'workflows', 'release.yml'), workflow({
+    publish: '      - name: Publish\n        run: npm publish --provenance 2>&1 | tee /tmp/publish.log\n',
+  }))
+  const pipedPublish = await runRules(releaseRoot, releaseRule)
+  check('a publish piped into another command fails', pipedPublish.checks[0].status === 'fail', pipedPublish.checks[0].message)
+  check('the finding explains the lost exit status', /exit status is lost/.test(pipedPublish.checks[0].message), pipedPublish.checks[0].message)
 
   console.log('\nchecks file')
   await expectError('a missing checks file is an error', () => loadChecks(work), /no checks file/)

@@ -66,12 +66,16 @@ The flow is fixed, and the workflow that implements it ships in this project:
 Nothing is published from your machine, so there is no `npm publish` to
 misremember and no local build to reproduce.
 
-**No registry token is stored.** The workflow exchanges the job's OIDC identity
-for a short-lived credential (trusted publishing), so the repository holds no
-long-lived secret to leak or rotate. One-time setup: npmjs.com → this package →
-Settings → **Trusted Publisher** → GitHub Actions, workflow filename
-`release.yml`. Until that is saved, the publish step **fails to authenticate**
-rather than silently succeeding.
+**The credential is either a token or OIDC.** If the repository has an
+`NPM_TOKEN` secret the workflow uses it; with no secret it exchanges the job's
+OIDC identity for a short-lived credential (trusted publishing), so nothing
+long-lived has to live in the repository. A missing token never skips the
+publish — the step always runs and picks whichever credential exists.
+
+For the tokenless path, one-time setup: npmjs.com → this package → Settings →
+**Trusted Publisher** → GitHub Actions, workflow filename `release.yml`. Until
+that is saved, a tokenless publish **fails to authenticate** rather than
+silently succeeding.
 
 **The very first publish has to be local.** A Trusted Publisher can only be
 configured on a package that already exists, so for a brand-new name this flow

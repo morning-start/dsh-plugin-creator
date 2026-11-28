@@ -217,11 +217,20 @@ git push origin v0.1.0
 - **资产名不带版本号**（`<name>.tgz`）。市场的 `tarball:` 常写 `releases/latest/download/<name>.tgz`，那里 tag 在请求时解析、文件名照字面取——带版本号下次发版就 404。
 - **`private: true` 时跳过 registry 步骤**而不是报错。本地 bundle 用 GitHub Release 分发就够了，不该因为没配 npm 就发不出去。
 
-### 不需要 npm token：OIDC trusted publishing
+### 凭据：有 token 就用 token，没有就走 OIDC
 
-**仓库里不存任何 registry 凭据。** `npm publish` 运行时用这个 job 的 OIDC 身份，向 npm 换一张**短期**、而且只对「这个仓库 + 这个 workflow」有效的凭据。跑完即失效，所以不存在能泄露的长期密钥，也没有要轮换的东西。
+workflow 里的发布步骤**无条件执行**，在步骤内部按顺序挑凭据：
 
-这也是 `release:pipeline` 规则会查的：workflow 里出现 `NPM_TOKEN` / `NODE_AUTH_TOKEN` 就报红，缺 `id-token: write` 也报红。
+| 顺序 | 凭据 | 什么时候用 | 代价 |
+|---|---|---|---|
+| 1 | `NPM_TOKEN` secret | 仓库配了这个 secret 就用它 | 长期有效，要记得轮换 |
+| 2 | OIDC trusted publishing | 没有 secret 时用这个，不需要任何长期密钥 | 要先去 npm 上给这个包配一次 Trusted Publisher |
+
+**缺 token 不会跳过发布。** 这是有意的：早先的版本把步骤写成 `if: env.NPM_TOKEN != ''`，结果是「没配 secret 的仓库静默地不发版，而且一路绿灯」——这比发版失败糟糕得多。`release:pipeline` 规则专门查这一条：把发布步骤挂在 token 上就报红。
+
+两种都支持，但**报错要分清**：认证失败会提示去配 Trusted Publisher 或加 token；「版本已存在」会提示 bump 版本打新 tag。两条建议不该混在一起——往错误的方向修一遍，比不知道原因还费时间。
+
+OIDC 那条路的一次性设置：npmjs.com → 这个包 → Settings → **Trusted Publisher** → GitHub Actions，workflow 文件名填 `release.yml`（**文件名绑在那里**，以后重命名要同步改）。
 
 一次性设置（**每个包一次**）：npmjs.com → 这个包 → Settings → **Trusted Publisher** → GitHub Actions，填
 

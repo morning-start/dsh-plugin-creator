@@ -181,14 +181,16 @@ markdown 里的**相对链接**必须解析得到。跳过 `http(s)://`、`mailt
 3. **registry 发布**：有 `npm publish` / `pnpm publish`；
 4. **GitHub Release**：有 `gh release create`；
 5. **concurrency group**：所有发版共用一个 group，两个 tag 一起推时串行化；
-6. **不读存起来的 token**：出现 `NPM_TOKEN` / `NODE_AUTH_TOKEN` 就报红——凭据应当由 OIDC 现场换；
-7. **有 `id-token: write`**：trusted publishing 与 provenance 都要这个身份。
+6. **发布步骤不能挂在 token 上**：`if: env.NPM_TOKEN != ''` 这种门闸会让「没配 secret 的仓库」**静默地不发版**，而且不报错。步骤无条件跑，在步骤里决定用哪个凭据；
+7. **有 `id-token: write`**：OIDC 兜底与 provenance 都要这个身份。**把 token 当偏好、OIDC 当兜底是允许的**；把 token 当必要条件不行。
 
 ```jsonc
 { "id": "release:pipeline", "type": "release-pipeline", "workflow": ".github/workflows/release.yml" }
 ```
 
 第 5 条有个坑：`group: release-${{ github.ref }}` 看起来「按 ref 分组更精细」，实际每个 tag 各成一组，等于没串行——同事就是这样把 `latest` 弄反的。必须是一个固定 group。
+
+凭据的优先顺序是 **`NPM_TOKEN` 有就用，没有就走 OIDC**：前者在任何 npm 账号上都能用；后者不需要任何长期密钥，但要先在 npm 上给这个包配一次 Trusted Publisher。
 
 只管**链路在不在**，不管这次发版对不对——版本↔标签的对账在 CI 里跑（`release:tag` 只能在 HEAD 已有 tag 时比）。
 

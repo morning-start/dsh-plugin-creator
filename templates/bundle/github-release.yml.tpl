@@ -6,11 +6,19 @@ name: Release
 #
 #   git tag v1.0.0 && git push origin v1.0.0
 #
-# No registry token is stored anywhere. `npm publish` exchanges this job's OIDC
-# identity for a short-lived credential scoped to this repository and this
-# workflow, so there is no long-lived secret to leak or rotate.
+# Publishing credential, in order of preference:
 #
-# One-time setup, on npmjs.com -> the package -> Settings -> Trusted Publisher:
+#   1. NPM_TOKEN — if the repository has that secret, it is used. Explicit, and
+#      works on any npm account, including ones where OIDC is not set up.
+#   2. OIDC trusted publishing — with no secret, `npm publish` exchanges this
+#      job's identity for a short-lived credential. Nothing long-lived sits in
+#      the repository.
+#
+# A missing token never skips the step: the step always runs and picks whichever
+# credential exists, so "no secret configured" cannot quietly mean "no publish".
+#
+# One-time setup, only needed for option 2 — npmjs.com -> the package -> Settings
+# -> Trusted Publisher:
 #
 #   Provider          GitHub Actions
 #   Repository owner  <owner>
@@ -18,7 +26,7 @@ name: Release
 #   Workflow filename  release.yml      (renaming this file breaks publishing)
 #   Environment       (leave empty)
 #
-# Until that is saved, the publish step fails to authenticate — it does not
+# Until that is saved, a tokenless publish fails to authenticate — it does not
 # silently succeed.
 
 on:
@@ -98,9 +106,16 @@ jobs:
           cp ./*.tgz "dist/$asset.tgz"
           echo "ASSET=dist/$asset.tgz" >> "$GITHUB_ENV"
 
-      # No token: npm mints one from this job's OIDC identity, before the step
-      # runs. Nothing in the repository can publish on its own.
+      # Credential, in order of preference:
+      #   1. NPM_TOKEN — if this repository has the secret, use it. Explicit and
+      #      works on any account.
+      #   2. OIDC trusted publishing — no secret at all: npm mints a short-lived
+      #      credential from this job's identity. Needs a Trusted Publisher
+      #      configured on npmjs.com for this package.
+      # The step always runs; a missing token must not be able to silence it.
       - name: Publish to the registry
+        env:
+          NPM_TOKEN: $\{{ secrets.NPM_TOKEN }}
         run: |
           if node -e "process.exit(require('./package.json').private === true ? 0 : 1)"; then
             echo "package.json is private: skipping npm publish"
@@ -109,15 +124,38 @@ jobs:
           fi
           name=$(node -p "require('./package.json').name")
           version=$(node -p "require('./package.json').version")
-          if npm publish --provenance --access public 2>&1 | tee /tmp/publish.log; then
+          if [ -n "$NPM_TOKEN" ]; then
+            echo "publishing with the NPM_TOKEN secret"
+            export NODE_AUTH_TOKEN="$NPM_TOKEN"
+          else
+            # setup-node wrote `_authToken=${NODE_AUTH_TOKEN}` into .npmrc. With the
+            # variable unset npm must fall through to trusted publishing, so drop
+            # the line rather than hand it an empty credential.
+            echo "no NPM_TOKEN secret: publishing with OIDC trusted publishing"
+            if [ -f "${NPM_CONFIG_USERCONFIG:-$HOME/.npmrc}" ]; then
+              sed -i '/_authToken/d' "${NPM_CONFIG_USERCONFIG:-$HOME/.npmrc}"
+            fi
+          fi
+          # No pipe around `npm publish`: a pipeline reports the last command's
+          # status, so `npm publish | tee` succeeds when publish fails. Capture
+          # the output, then decide on the real exit code.
+          set +e
+          npm publish --provenance --access public > /tmp/publish.log 2>&1
+          status=$?
+          set -e
+          cat /tmp/publish.log
+          if [ "$status" -eq 0 ]; then
             echo "published $name@$version"
             exit 0
           fi
-          if grep -qiE 'E404|ENEEDAUTH|401|403|not authorized|unauthenticated' /tmp/publish.log; then
-            echo "::error::the registry did not accept this job's OIDC identity. This package needs a Trusted Publisher: npmjs.com -> the package -> Settings -> Trusted Publisher -> GitHub Actions, with workflow filename release.yml. Until that is saved, npm treats the publish as anonymous and answers 404."
-          elif grep -qi 'cannot publish over the previously published versions' /tmp/publish.log; then
+          if grep -qi 'cannot publish over the previously published versions' /tmp/publish.log; then
             echo "::error::$name@$version is already in the registry. A published version cannot be overwritten: bump package.json and push a NEW tag."
+          elif [ -n "$NPM_TOKEN" ]; then
+            echo "::error::publishing with the NPM_TOKEN secret failed; the token may be expired or lack publish rights for $name. See the npm output above."
           else
+            echo "::error::the registry did not accept this job's OIDC identity. Either add an NPM_TOKEN secret, or configure a Trusted Publisher on npmjs.com -> the package -> Settings -> Trusted Publisher -> GitHub Actions with workflow filename release.yml. Until one of those exists npm treats the publish as anonymous and answers 404."
+          fi
+          exit 1
             echo "::error::publishing $name@$version failed; see the npm output above."
           fi
           exit 1
