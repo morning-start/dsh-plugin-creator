@@ -88,7 +88,9 @@ node <dsh-plugin-creator>/scripts/release.mjs publish . --yes   # no provenance;
 # then: npmjs.com -> Settings -> Trusted Publisher, workflow filename release.yml
 ```
 
-After that, delete the token and use the tag flow above for every release.
+After that, either keep the token (CI uses it every time) or delete it (CI
+switches to OIDC on its own) — both work, and neither can silently skip a
+publish.
 `npm view <name> version` answering means the package exists and you are past the
 bootstrap; a 404 means you have not bootstrapped yet.
 

@@ -36,14 +36,14 @@ check → pack → publish → release → verify(advisory)
 | Readiness check | 本仓库跑 `release check` |
 | Suites | 本仓库跑 CI 能跑的回归（`try-ui` 要真浏览器，不在里面） |
 | Pack | `npm pack`，复制成**不带版本号**的资产名 |
-| Publish to the registry | `npm publish --provenance`，凭据由 OIDC 现场换，**仓库不存 token**；版本已存在则失败并说明下一步 |
+| Publish to the registry | `npm publish --provenance`；凭据**有 `NPM_TOKEN` 就用它、没有走 OIDC**，步骤不会被跳过；版本已存在则失败并说明下一步 |
 | Create the GitHub Release | `gh release create`；已存在就跳过 |
 | Registry propagation | advisory，registry 慢不撤销已经发生的发布 |
 
 **为什么必须是 CI**：
 
 - **provenance 只有 CI 有**。`npm publish --provenance` 用 OIDC 身份证明「这个包是从哪个仓库、哪次提交构建的」。本地发版没有这个身份，签名是空的——**引导那一次是唯一的例外，它发出的版本没有 provenance，补不回来**。
-- **凭据不落盘**。OIDC 每次运行换一张短期票，仓库里没有可泄露的长期密钥。
+- **凭据二选一，缺一个不会静默**。有 `NPM_TOKEN` 就用它（任何账号都能立刻发），没有就用 OIDC 换一张短期票（仓库里没有长期密钥）。**发布步骤不会被「没 token」跳过**——那是最坏的结果：一路绿灯，却没有版本发出去。
 - **版本↔标签只在推标签那一刻对账**。本地永远不知道你要打什么 tag。
 - **并发只有 `concurrency` 能挡**。两个 tag 推得近，两个 run 同时 publish，后完成的会把 `latest` 覆盖回旧版本。
 
@@ -70,12 +70,17 @@ node scripts/release.mjs publish . --yes             # 本地发，没有 proven
 #   Repository owner / name 填好，Workflow filename 填 release.yml，Environment 留空
 ```
 
-配好之后，**把这个 token 从本机、从仓库都删掉**——后续版本全部由 tag 触发 CI，CI 用 OIDC 现场换票，不再需要任何 token。
+配好之后可选两件事之一，两条路都对：
+
+- **留着 `NPM_TOKEN`**：CI 每次都用它发，稳定、任何账号都能用；代价是这个长期密钥要记得轮换。
+- **删掉 `NPM_TOKEN`**：CI 自动切到 OIDC，仓库里不再有长期密钥；代价是依赖上面那次 Trusted Publisher 配置。
+
+**缺 token 不会让发布被跳过**——工作流的发布步骤无条件执行，在步骤内部选凭据。
 
 | 前提 | 谁来提供 | 之后还要吗 |
 |---|---|---|
 | 包名已在 npm 上存在 | 第一次本地 `publish`（要 token） | 不需要，包已存在 |
-| 发布凭据 | 第一次：本机 token；之后：CI 的 OIDC | 之后不需要 token |
+| 发布凭据 | 第一次：本机 token；之后：**有 `NPM_TOKEN` 就用它，没有用 CI 的 OIDC** | 两者之一即可 |
 | `release.yml` 的存在与形状 | 生成的插件项目自带 | 一直需要，`release:pipeline` 规则守着 |
 
 **判断自己走到哪一步了**：`npm view <name> version` 有输出 → 包已存在，可以只走 tag；报 404 → 还没引导过，先本地发一次。
@@ -230,9 +235,7 @@ workflow 里的发布步骤**无条件执行**，在步骤内部按顺序挑凭�
 
 两种都支持，但**报错要分清**：认证失败会提示去配 Trusted Publisher 或加 token；「版本已存在」会提示 bump 版本打新 tag。两条建议不该混在一起——往错误的方向修一遍，比不知道原因还费时间。
 
-OIDC 那条路的一次性设置：npmjs.com → 这个包 → Settings → **Trusted Publisher** → GitHub Actions，workflow 文件名填 `release.yml`（**文件名绑在那里**，以后重命名要同步改）。
-
-一次性设置（**每个包一次**）：npmjs.com → 这个包 → Settings → **Trusted Publisher** → GitHub Actions，填
+OIDC 那条路的一次性设置（**每个包一次**）：npmjs.com → 这个包 → Settings → **Trusted Publisher** → GitHub Actions，填
 
 | 字段 | 值 |
 |---|---|
@@ -243,7 +246,7 @@ OIDC 那条路的一次性设置：npmjs.com → 这个包 → Settings → **Tr
 
 **workflow 文件名绑在 publisher 配置里**——以后重命名 `release.yml`，必须同步去 npm 改，否则下次发版认证失败。
 
-没配好之前，publish 那步会**直接认证失败**，不会静默成功。这是有意的：宁可发不出去，也不发一个来历不明的包。
+**没配好之前，tokenless 发布是直接认证失败**，不会静默成功。配了 token 就绕开这个前提——这也是它作为第一顺位的原因：新包、新账号、临时环境都能立刻发。
 
 什么时候才需要 token：用不了 OIDC 的时候（私有 registry、self-hosted runner）。那时才加 `NPM_TOKEN` secret，并接受它是长期有效的、需要轮换——能不用就别用。
 
