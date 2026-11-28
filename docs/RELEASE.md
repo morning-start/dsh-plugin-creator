@@ -248,14 +248,31 @@ OIDC 那条路的一次性设置（**每个包一次**）：npmjs.com → 这个
 
 **没配好之前，tokenless 发布是直接认证失败**，不会静默成功。配了 token 就绕开这个前提——这也是它作为第一顺位的原因：新包、新账号、临时环境都能立刻发。
 
-配信任用 CLI 就行（比去网页点表单可靠，且能写进脚本）：
+配信任有两条路，**先看自己的环境**：
 
 ```bash
 npm trust github <包名> --file release.yml --allow-publish \
   --registry https://registry.npmjs.org --dry-run   # 先看，再去掉 --dry-run
-npm trust list <包名>          # 核对
-npm trust revoke <包名> --id=<id>   # 轮换/改名时用
+npm trust list <包名>            # 核对
+npm trust revoke <包名> --id=<id> # 轮换/改名时用
 ```
+
+**CLI 只适合在真终端里跑。** `npm trust` 的 2FA 步骤走 `otplease`，而它要求 stdin 和 stdout **都是 TTY**；在 CI、脚本、非交互 shell 里它会直接抛 `EOTP`，且把授权链接脱敏成 `auth/cli/***`——那条链接谁也拿不到。所以：
+
+| 环境 | 用什么 |
+|---|---|
+| 你本人在真终端 | `npm trust ...`，它会打印链接并等你确认 |
+| 非交互（agent、CI、脚本） | 浏览器表单：npmjs.com → 这个包 → Settings → **Trusted Publisher** |
+| 只想看会配成什么 | `--dry-run`，不需要 2FA，任何环境都能跑 |
+
+**bypass-2FA 的 token 配不了信任。** 这类 token（CI 里常见的那种）发布能用，改信任会被拒：
+
+```
+E403  Granular access tokens that bypass two-factor authentication
+      may not perform this action.
+```
+
+2FA 本身也要真人在场：安全密钥要插进去触摸、指纹要按——程序注入的点击不算「用户激活」，页面会原地不动。
 
 账号与 registry 那一侧的判断（信任关系、token 与 OIDC 的取舍、dist-tag、`deprecate` 代替 `unpublish`、各种 npm 报错的原因）在 [`skills/npm-package-manager/SKILL.md`](../skills/npm-package-manager/SKILL.md)。
 

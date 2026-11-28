@@ -53,6 +53,41 @@ npm trust revoke <包名> --id=<trust-id>                                # 撤�
 - 需要**账号 2FA 且对该包有写权限**；
 - 另有 `npm trust gitlab` / `npm trust circleci` 子命令，权限标志是同一套。
 
+### 2FA 这一步：谁能做、在哪做
+
+**先看自己的 token 类型。** CI 里那种 `npm_` 开头、勾了 bypass 2FA 的 token **配不了信任**：
+
+```
+E403  Granular access tokens that bypass two-factor authentication
+      may not perform this action.
+```
+
+它连 `npm trust list` 都读不了。能改信任的只有两类：网页登录得到的会话 token，或不勾 bypass 的 granular token + 当场给码。
+
+**再看自己有没有终端。** `npm trust` 的 2FA 步骤走 `otplease`，第一件事就是：
+
+```js
+if (!process.stdin.isTTY || !process.stdout.isTTY) throw err
+```
+
+非 TTY 时它直接抛 `EOTP`，而且**授权链接被 npm 的输出层脱敏成 `auth/cli/***`**——registry 返回的原文里有完整链接，但 npm 不显示。所以：
+
+| 环境 | 可行做法 |
+|---|---|
+| 你本人的真终端 | 直接 `npm trust ...`，它会打印链接并要求按 ENTER 开浏览器 |
+| agent / 脚本 / CI | `--dry-run` 看配置对不对，然后**用浏览器表单** |
+| 浏览器表单 | npmjs.com → 这个包 → Settings → Trusted Publisher → 填 owner / repo / `release.yml` / 环境留空 / 勾 Allow publish |
+
+**2FA 必须真人做。** 安全密钥要插上触摸、指纹要按；程序注入的点击**不算**「用户激活」，页面会停在原地不动，也不报错。
+
+配完用 `npm trust list <包名>` 核对，记下返回的 `id`——**发布后能在 registry 上对账**：`_npmUser.trustedPublisher.oidcConfigId` 就是这个 id，对得上才算真走了 OIDC。
+
+```bash
+# 对账（不看本机 npm 缓存，直接问 registry）
+curl -s https://registry.npmjs.org/<包名> | jq '.versions["<版本>"]._npmUser'
+# → {"name":"GitHub Actions", "trustedPublisher":{"oidcConfigId":"<那个 id>"}}
+```
+
 **镜像会坏事。** 本机 `.npmrc` 常指向镜像，npm 会警告 `may not support trusted publishing`，然后对镜像配信任。必须显式：
 
 ```bash
