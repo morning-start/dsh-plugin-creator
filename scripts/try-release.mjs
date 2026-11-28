@@ -120,6 +120,22 @@ try {
   check('the surface excludes tmp', surface.files.every(file => !file.startsWith('tmp/')), JSON.stringify(surface.files.filter(file => file.startsWith('tmp/'))))
   check('the surface has a size', typeof surface.totalSize === 'number')
 
+  // A packer can print a warning before its JSON; scanning for the first
+  // bracket used to give up and report the `files` approximation instead. That
+  // is how this passed locally and failed in CI on a newer npm.
+  const packJson = JSON.stringify([{ id: 'x@1.0.0', files: [{ path: 'package.json', size: 10 }, { path: 'lib/a.js', size: 5 }] }])
+  const noisy = packSurface(repo, {
+    exec: (command) => (command.startsWith('pnpm')
+      ? { status: 1, stdout: '' }
+      : { status: 0, stdout: `npm notice something happened [not json]\n${packJson}\n` }),
+  })
+  check('a warning before the JSON does not hide the surface', noisy.source === 'npm', noisy.source)
+  check('the noisy surface still lists the manifest', noisy.files.includes('package.json'), JSON.stringify(noisy.files))
+  check('the noisy surface keeps the sizes', noisy.totalSize === 15, String(noisy.totalSize))
+
+  const noPacker = packSurface(repo, { exec: () => ({ status: 1, stdout: '' }), files: ['package.json', 'tmp/x.js'] })
+  check('with no packer the surface is the files approximation, and says so', noPacker.source === 'files-field' && noPacker.approximate === true, noPacker.source)
+
 
   console.log('\nshipping')
   const shipDir = join(work, 'ship')

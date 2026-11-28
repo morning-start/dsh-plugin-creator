@@ -268,7 +268,10 @@ dsh plugin --profile <profile> add <name>@<上一版版本>
 | **包发了，`latest` 指错了** | `npm dist-tag add <name>@<ver> latest`。这一步需要登录 npm，CI 的 OIDC 票只覆盖 `publish`，覆盖不了 dist-tag |
 | **版本号错了** | 改 `package.json` → 提交 → 打**新**标签。**不要移动旧标签**：标签一旦被消费（Release 已建、包已发），移动它会让「这个标签指向什么」变得不可信 |
 | **CI 里 publish 说版本已存在** | 这个版本已经在 registry 上了。改 `package.json` 发新版本，不要重推同一个 tag |
+| **CI 在门禁阶段就红了，什么都没发出去** | 这种情况可以移动 tag：改完重新 `git tag -f vX.Y.Z <commit>` 再强推。**判据是「有没有被消费」**——npm 上没有这个版本、Release 也没建，就还没被任何人拿到 |
 | **发出去的包没有 provenance** | 无法补。下一代版本走 CI 就会有，已经发出的那一个改不了 |
+
+**移动 tag 的唯一合法时机**就是上面第三行：门禁失败、产物为零。一旦 npm 上有了这个版本、或 Release 已建，标签就被消费了——那时它指向什么已经是别人下载的依据，只能打新版本。
 
 `concurrency: group: release` 让所有发版串行，所以「两个 tag 一起推、`latest` 被覆盖」这类事故不会再发生——它是被串行化挡掉的，不是靠事后修。
 
