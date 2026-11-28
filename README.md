@@ -197,8 +197,6 @@ scripts/              CLI 与回归检查（adopt.mjs 规范化已有项目）
 .github/workflows/    tag 触发的发版工作流（生成的插件包也带一份）
 ```
 
-**改这个仓库之前先读 [`AGENTS.md`](AGENTS.md)**：它写明「什么内容该放哪个目录」（流程 → `docs/`，踩过的坑 → `errors/`，运行期事故 → `incidents.md`）、哪些是生成物不许手改、以及十条硬约束。
-
 ## 验证
 
 1. `dsh --profile desktop --dump-config` 里能看到 `creator-host` 行，以及一个插件列表以 `creator-tools`、`creator-skills` 结尾的 `preset-cordis`。
@@ -210,34 +208,9 @@ scripts/              CLI 与回归检查（adopt.mjs 规范化已有项目）
 
 ## 开发
 
-纯 ESM，**无依赖、无构建步骤**，这是刻意的：预设行从 profile 解析 import，所以 `@deepseek-ai/*` 那套编写辅助（`defineTool`、schemastery）在这里 import 不到，工具因此写成裸 JSON Schema。
+改这个仓库、给这个仓库提 PR，或者让 agent 在这个仓库里干活——看 [`AGENTS.md`](AGENTS.md)：本地怎么跑、什么内容该放哪个目录、哪些是生成物不许手改、十条硬约束。
 
-不需要宿主就能跑的检查：
-
-```powershell
-node scripts/try-tool.mjs .        # 桩上下文上挂载全部工具 + 守卫
-node scripts/try-sandbox.mjs       # 沙盒引擎，用假 dsh 启动器
-node scripts/check-project.mjs .   # 项目自己声明的规则（断链、locale、契约漂移…）
-node scripts/check-patch.mjs .     # 解析 patch 并与出厂预设比对
-```
-
-`try-tool.mjs` 是模板的回归测试：生成的 bundle 通不过自己的结构检查它就失败，所以一次破坏产物的模板改动不用安装任何东西就能被抓到。`try-sandbox.mjs` 用假启动器驱动 create / start / status / stop——不引导 profile、不占真实端口——覆盖归属标记、端口唯一、工作区改写、凭据扫描。
-
-`check-patch.mjs` 用 DSH 同款 YAML 库解析 patch 并与 `@deepseek-ai/dsh-web-app/presets/cordis.patch.yml` 比对：漏行、行序变化、plan-mode 段落被改、意外新增，都会失败。桌面版里那个文件在 `app.asar` 内，所以要用 DSH 的运行时跑：
-
-```powershell
-$env:ELECTRON_RUN_AS_NODE = "1"
-& $env:DSH_NODE_EXECUTABLE scripts\check-patch.mjs .
-```
-
-改动用隔离实例验证，别用桌面端（`dsh-plugin-isolated-test` skill 就是流程）：
-
-```powershell
-$env:DSH_HOME = "<这个检出>\tmp\iso-home"   # 复用，不要每次重建
-dsh --profile iso-creator --host 127.0.0.1 --port 3099 --no-open
-```
-
-`tmp/` 已被 git 忽略。
+用户不需要读它。这里只说明一件事：**纯 ESM、无依赖、无构建步骤**是刻意的——预设行从 profile 解析 import，所以 `@deepseek-ai/*` 那套编写辅助（`defineTool`、schemastery）在这里 import 不到，工具因此写成裸 JSON Schema。
 
 ## 路线图
 

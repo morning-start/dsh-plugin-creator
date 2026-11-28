@@ -1,12 +1,57 @@
 # AGENTS.md
 
-给在这个仓库里干活的 agent 看的。目标读者是模型和第一次来的人：**动手前先确认「这件事属于哪儿」**，避免把流程写成错误、把产物当源码、把判断塞进引擎。
+**这是本项目的开发文档**：怎么在本地跑、改动该放哪儿、什么不能碰。
 
-## 这个仓库是什么
+- **想用这个插件**（怎么装、几个工具、几个 skill）→ 看 [`README.md`](README.md)，那份是给用户的。
+- **想改这个仓库**（写代码、加规则、加工具、写文档）→ 就是这份。
 
-一个 DSH 插件 `dsh-plugin-creator`：把 DSH 插件从构思到发版的**机械部分**做成工具（工具 6 个 + 3 个 skill），把**判断**留给 skill 和对话。
+## 本地怎么跑
 
-一条原则贯穿全部：**边界属于项目，不属于工具。** 工具不替你定义「什么算合格」——项目在自己的 `checks.json` 里声明。
+纯 ESM，**无依赖、无构建步骤**。不需要安装、不需要宿主，除了最后那组要用 DSH 运行时。
+
+### 日常三件套
+
+```powershell
+node scripts/check-project.mjs .      # 项目自己声明的规则：断链、locale、契约漂移、卡片完整性…
+node scripts/try-checks.mjs           # 规则引擎的回归（正例 + 反例）
+node scripts/list-errors.mjs          # errors/ 里有哪些卡片，按系统原文反查
+```
+
+`check-project.mjs` 读项目根的 `checks.json`；`--only <id>` 只跑一条。**判据是全部 exit 0**，不是「我改的那个文件没报错」。
+
+### 全部回归
+
+```powershell
+node scripts/try-checks.mjs      # 规则引擎与项目检查
+node scripts/try-generate.mjs    # 模板引擎：四种组合生成并自检
+node scripts/try-audit.mjs       # 规范化已有插件的审计
+node scripts/try-adopt.mjs       # adopt 的检查与改写
+node scripts/try-tool.mjs        # 桩上下文上挂载全部工具 + 安装守卫
+node scripts/try-sandbox.mjs     # 沙盒引擎，用假启动器
+node scripts/try-ui.mjs          # CDP 客户端与无头浏览器
+node scripts/try-market.mjs      # 市场条目生成与校验
+node scripts/try-release.mjs     # 就绪检查、打包、发布、演练
+```
+
+`try-tool.mjs` 同时是模板的回归：生成的 bundle 通不过自己的结构检查它就失败——一次破坏产物的模板改动，不用安装任何东西就能抓到。
+
+### 要用宿主的两项
+
+`check-patch.mjs` 用 DSH 同款 YAML 库解析 patch，并与 `@deepseek-ai/dsh-web-app/presets/cordis.patch.yml` 比对（漏行、行序变化、plan-mode 段落被改、意外新增都会失败）。桌面版里那个文件在 `app.asar` 内，所以要用 DSH 的运行时跑：
+
+```powershell
+$env:ELECTRON_RUN_AS_NODE = "1"
+& $env:DSH_NODE_EXECUTABLE scripts\check-patch.mjs .
+```
+
+改动用**隔离实例**验证，别用桌面端（流程见 `skills/dsh-plugin-sandbox`）：
+
+```powershell
+$env:DSH_HOME = "<这个检出>\tmp\iso-home"   # 复用，不要每次重建
+dsh --profile iso-creator --host 127.0.0.1 --port 3099 --no-open
+```
+
+`tmp/` 已被 git 忽略，但**不要提交**。
 
 ## 内容归属：先问「这是哪一类」
 
@@ -15,7 +60,7 @@
 | 你手上的东西 | 放哪儿 | 判据 |
 |---|---|---|
 | **流程 / 规范 / 约定**：怎么发版、怎么提交、目录该怎么排 | `docs/` | 回答「应该怎么做」。没有故障现象 |
-| **错误 / 踩过的坑**：做错了什么、系统原话是什么、怎么修 | `errors/` | 回答「做错了什么」。**必须能写出 `matches`（系统报错原文）** |
+| **错误 / 踩过的坑**：做错了什么、系统原话是什么、怎么修 | `errors/` | 回答「做错了什么」。**必须能写出 `matches`（系统报错原文，英文）** |
 | **运行期事故**：端口被占、桌面端被顶掉、面板不渲染 | `skills/*/references/incidents.md` | 静态扫不出来，只能按现象反查 |
 | **某个角色该怎么想**：问什么、定什么、什么算验证过 | `skills/<name>/SKILL.md` | 是判断，不是机械步骤 |
 | **可判定的规则** | `lib/rules.js` + `lib/rule-types.js` + `checks.json` | 能扫源码或文件给出 pass/fail |
@@ -38,15 +83,18 @@
 | `index.js` | 插件入口：读配置、拼 `host`、注册工具与 skill 提供者 | 源 |
 | `cordis.patch.yml` | bundle patch：把本包插进部署的组合配置 | 源 |
 | `lib/` | 引擎。每个文件一个域，纯逻辑，不依赖 DSH 运行时 | 源 |
-| `tools/index.js` | 6 个工具的定义与注册（`dsh_plugin_*`） | 源 |
+| `lib/rule-types.js` | 规则类型清单：检查器与卡片校验共用 | 源 |
+| `lib/errors-card.js` | `errors/` 卡片的解析与完整性校验 | 源 |
+| `tools/index.js` | 工具定义与注册（`dsh_plugin_*`） | 源 |
 | `skills/` | 3 个 skill：`dsh-plugin-new`、`dsh-plugin-sandbox`、`dsh-plugin-fix-error` | 源 |
 | `templates/bundle/` | 生成插件包的模板 + `recipe.json` 方案 | 源 |
 | `docs/contracts/tools.json` | 工具契约的**生成物** | `scripts/gen-tools-contract.mjs` |
 | `templates/bundle/github-release.yml.tpl` | CI 工作流的**生成物** | `.github/workflows/release.yml` |
-| `errors/` | 已知错误：卡片（frontmatter）+ 正文 | 源 |
+| `errors/` | 已知错误：卡片（六字段）+ 正文 | 源 |
 | `checks.json` | 本仓库自己声明要一直成立的边界 | 源 |
 | `scripts/try-*.mjs` | 回归套件，全部要 exit 0 | 源 |
 | `scripts/gen-*.mjs` | 生成器，产物与它对账 | 源 |
+| `market.json` | 市场条目的那一行声明 | 源 |
 | `tmp/` | 临时文件，git 忽略，不发布 | 源（但别提交） |
 
 **生成物不许手改。** 改了也会被 `contract-drift` 类规则判红，且下次生成就覆盖。改生成器或改源。
@@ -74,17 +122,25 @@
 
 先写文档再写检查，最后一定是文档在描述一个不存在的东西。
 
-## 修改时的习惯
+## 提交前
 
-- **改 persona / skill 前先读 `docs/PHILOSOPHY.md`**：哪些判断归引擎、哪些归 skill，那里有分工。
-- **改模板后跑 `node scripts/try-generate.mjs`**：它会生成四种组合（有/无工具 × 有/无 skill）并跑生成包自己的 `checks.json`。
-- **改 `checks.json` 或规则后跑全量**：`node scripts/check-project.mjs .` + 所有 `scripts/try-*.mjs`。判据是**全部 exit 0**，不是「改的那个文件没报错」。
-- **加文件到 `errors/` 前跑 `node scripts/list-errors.mjs`**：看现有卡片，确认不是重复条目。
-- **改 docs 后跑 `docs:links`**：相对链接失效是本仓库最高频的回归。
+```powershell
+node scripts/check-project.mjs .    # 必须 0 fail
+# 全部 try-*.mjs，必须全 exit 0
+```
+
+- 改 `checks.json` 或规则 → 跑全量，别只跑自己那条。
+- 改模板 → `try-generate.mjs`（四种组合生成并自检）。
+- 改 docs → `docs:links` 会查相对链接，**这是本仓库最高频的回归**。
+- 加 `errors/` 条目 → 先 `list-errors.mjs` 看有没有重复。
+- 改 persona / skill → 先读 `docs/PHILOSOPHY.md`：哪些判断归引擎、哪些归 skill。
+
+用户文档（`README.md`、`docs/`）面向使用者，写「是什么、怎么用」；**不要往里写「改代码时要怎样」**——那是这份文件的事。
 
 ## 不要做
 
 - 不要在 `errors/` 里放流程、规范、最佳实践——那是 `docs/`。
+- 不要往 `README.md` 里写开发流程、命令清单、改代码须知——那是这份文件的事。
 - 不要手改生成物（契约文件、模板产物、market 条目 YAML）。
 - 不要为了「更规范」引入依赖或新机制；顺着现有写法改。
 - 不要把判断写进工具：工具只做确定性的事，需要判断的写进 skill。

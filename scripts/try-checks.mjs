@@ -517,6 +517,15 @@ try {
   const manifest = JSON.parse(readFileSync(join(repo, 'package.json'), 'utf8'))
   check('the card lister ships with the package', (manifest.files ?? []).includes('scripts/list-errors.mjs'), JSON.stringify(manifest.files))
   check('the cards ship with the package', (manifest.files ?? []).includes('errors'), JSON.stringify(manifest.files))
+
+  // Two audiences, two documents: README says what this is and how to use it,
+  // AGENTS says how to work on it. Leaking one into the other is how a README
+  // turns into a build guide nobody who installed the plugin wants.
+  const readme = readFileSync(join(repo, 'README.md'), 'utf8')
+  check('the README carries no dev-only regression commands', !/scripts\/try-/.test(readme), (readme.match(/scripts\/try-[a-z]+\.mjs/g) ?? []).join(', '))
+  const agents = readFileSync(join(repo, 'AGENTS.md'), 'utf8')
+  check('AGENTS.md carries the development commands', /scripts\/try-checks\.mjs/.test(agents) && /check-project\.mjs/.test(agents))
+  check('AGENTS.md points at the README for users', /README\.md/.test(agents))
 } finally {
   rmSync(work, { recursive: true, force: true })
 }
