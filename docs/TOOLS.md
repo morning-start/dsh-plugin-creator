@@ -15,6 +15,7 @@ README 讲能力，这个文件讲**具体是哪个工具、什么参数、边�
 | 沙盒测试（建 / 起 / 探 / 停 / 清） | `dsh_sandbox` + 技能 `dsh-plugin-sandbox`（负责判断） | `scripts/sandbox.mjs` |
 | 看页面 / 断言 / 真实点击 | `dsh_plugin_ui` | `scripts/ui.mjs` |
 | 发版（改版本 / 就绪检查 / 打包 / 沙盒演练） | `dsh_plugin_release` | `scripts/release.mjs` |
+| 建仓库 / 对齐仓库（公开 + dsh-plugin topic） | `dsh_repo` | `scripts/repo.mjs` |
 | 发布之后：一条命令跑完 check → pack → publish → release → verify | — | `scripts/release.mjs ship` |
 | 发布之后：单步 npm 发布 / 传播核对 / GitHub Release / 市场条目 | —（只走 CLI，因为都在推送之后） | `scripts/release.mjs publish\|verify\|gh-release\|market` |
 | 按方案生成任意结构化内容 | `dsh_plugin_new` 的 `recipe` 参数 | `scripts/new-bundle.mjs --recipe` |
@@ -168,6 +169,22 @@ README 讲能力，这个文件讲**具体是哪个工具、什么参数、边�
 
 `version` 只改 `package.json`，**不做 git 操作**：提交、打 tag、推送各自可见且可回退，而 publish 不可回退，所以它们不该被合成一条命令。
 
+### `dsh_repo`
+
+把项目放到 GitHub 上，并把仓库对齐到插件市场的约定：**公开** + `dsh-plugin` topic（市场的发现靠这个 topic，默认 private 等于让它找不到）。
+
+| `action` | 参数 | 作用 |
+|---|---|---|
+| `plan` | `path`、`owner?`、`repo?`、`visibility?`、`topic?` | **只读**：打印它将会跑的那几条 `gh` 命令，什么都不改 |
+| `create` | `path`、`owner`、`repo?`、`visibility?`、`topic?`、`description?`、`dryRun?` | 目录还没有 `origin`：`git init` → 对齐 `package.json` 的 `repository` → `gh repo create <owner>/<repo> --public --source . --remote origin --push` → `gh repo edit --add-topic dsh-plugin` |
+| `update` | `path`、`visibility?`、`topic?`、`description?`、`commit?`、`dryRun?` | 目录已经指向 GitHub：可见性与目标不一致时才 `gh repo edit --visibility`；补 topic / 描述（已存在时是幂等的）；把 `package.json` 的 `repository` 对齐成**单独一个提交**，**不推送** |
+
+两个动作的分界是「有没有 `origin`」：有 `origin` 时调 `create` 会**直接拒绝**并让你用 `update`，否则就会多出一个仓库。反过来 `update` 遇到没有 `origin` 的目录也会拒绝。
+
+**`update` 从不推送。** 准备一个提交和把它公开是两件事，后者是用户的决定。
+
+`repository` 字段对齐先于 `create` 的推送，所以落到 GitHub 上的第一个提交就已经指回自己。
+
 ## 守卫（不是工具）
 `ctx.tools.guard()`，在调用**执行前**拒绝，不占用任何工具位。拒绝这两种：
 
@@ -191,7 +208,7 @@ README 讲能力，这个文件讲**具体是哪个工具、什么参数、边�
 
 | 脚本 | 覆盖 |
 |---|---|
-| `scripts/try-tool.mjs` | 六个工具挂载 + 生成一个包并自检 + 守卫用例 11 条 + 沙盒宿主 2 条 |
+| `scripts/try-tool.mjs` | 八个工具挂载 + 生成一个包并自检 + 守卫用例 11 条 + 沙盒宿主 2 条 |
 | `scripts/try-generate.mjs` | 通用引擎与规则引擎（40 项）+ 两种 bundle 变体 |
 | `scripts/try-sandbox.mjs` | 沙盒引擎（45 项，假启动器，不开真宿主） |
 | `scripts/try-release.mjs` | 发版检查（30 项：semver 子集、就绪检查、真实包面） |

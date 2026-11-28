@@ -100,9 +100,25 @@ dsh_plugin_new({
 4. 页面里的图标、标题、描述是渲染结果，没看到就不要说「显示正常」。
 5. 只有**发布成版本**、或**用户明确要求并自己开了 `DSH_ALLOW_LOCAL_PLUGIN_INSTALL=1`** 时，才装进当前环境。
 
-## 6. 不要做的事
+## 6. 放到 GitHub 上（要发布时才做）
+
+**一个插件仓库默认是公开的，并且带 `dsh-plugin` topic**——市场靠这个 topic 发现插件，默认 private 等于让插件找不到自己要用的东西。这一步工具化了，别手敲 `gh`：
+
+```text
+dsh_repo { action: 'plan',   path: '<生成的目录>', owner: '<owner>' }   # 只读，先看它要跑什么
+dsh_repo { action: 'create', path: '<生成的目录>', owner: '<owner>' }   # 目录还没有 origin
+dsh_repo { action: 'update', path: '<生成的目录>' }                     # 已经有 origin
+```
+
+- `create`：`git init` → 对齐 `package.json` 的 `repository` → `gh repo create --public --push` → 补 `dsh-plugin` topic。**先对齐再推**，所以落到 GitHub 上的第一个提交就指回自己。
+- `update`：不重建仓库；可见性与目标不一致时才改，补 topic / 描述（已存在时幂等），把 `repository` 对齐成**单独一个提交**——**它不推送**，推不推由用户决定。
+
+两点不要自作主张：`owner` 要问用户（个人账号还是组织）；把仓库改成**公开**是暴露代码的决定，`plan` 先给他看，同意了再 `create`。
+
+## 7. 不要做的事
 
 - 不要用大写或带空格的包名（npm 不接受，生成器会直接报错）。
 - 不要为了省一步去手写 manifest——手写的那份没有经过检查。
 - 不要在别人已经写过的目录里 `force`，除非用户明确要求。
 - 不要把「生成了」说成「装好了」：生成只写了文件，装是第 5 步。
+- 不要建私有仓库再把「发布」挂在嘴上：市场发现不了私有仓库，用户想要公开还是私有要先问清。

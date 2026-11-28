@@ -228,7 +228,7 @@ markdown 里的**相对链接**必须解析得到。跳过 `http(s)://`、`mailt
 
 > 为什么值得做：myteam 项目的工具面契约是 `gen-tool-contract.mjs` 生成的，`--check` 守着它。手写那版曾经落后于代码，导致文档上写着不存在的工具。生成 + 对账之后，改工具必然改契约，否则 CI 红。
 
-本仓库也用自己的规则检查自己的工具面：`scripts/gen-tools-contract.mjs` 把六个工具的名字、说明、参数 schema、输出 schema 生成为 `docs/contracts/tools.json`，`checks.json` 里的 `contract:tools` 守着它。
+本仓库也用自己的规则检查自己的工具面：`scripts/gen-tools-contract.mjs` 把八个工具的名字、说明、参数 schema、输出 schema 生成为 `docs/contracts/tools.json`，`checks.json` 里的 `contract:tools` 守着它。
 
 ## 生成的插件包自带起手 checks.json
 

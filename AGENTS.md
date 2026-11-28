@@ -31,6 +31,7 @@ node scripts/try-sandbox.mjs     # 沙盒引擎，用假启动器
 node scripts/try-ui.mjs          # CDP 客户端与无头浏览器
 node scripts/try-market.mjs      # 市场条目生成与校验
 node scripts/try-release.mjs     # 就绪检查、打包、发布、演练
+node scripts/try-repo.mjs        # 建仓库 / 对齐仓库（注入假 gh，不碰 GitHub）
 ```
 
 `try-tool.mjs` 同时是模板的回归：生成的 bundle 通不过自己的结构检查它就失败——一次破坏产物的模板改动，不用安装任何东西就能抓到。
@@ -88,7 +89,8 @@ dsh --profile iso-creator --host 127.0.0.1 --port 3099 --no-open
 | `lib/` | 引擎。每个文件一个域，纯逻辑，不依赖 DSH 运行时 | 源 |
 | `lib/rule-types.js` | 规则类型清单：检查器与卡片校验共用 | 源 |
 | `lib/errors-card.js` | `errors/` 卡片的解析与完整性校验 | 源 |
-| `tools/index.js` | 工具定义与注册（`dsh_plugin_*`） | 源 |
+| `lib/repo.js` | 建仓库 / 对齐仓库：默认公开 + `dsh-plugin` topic；exec 可注入所以能测 | 源 |
+| `tools/index.js` | 工具定义与注册（7 个 `dsh_plugin_*` + `dsh_repo`） | 源 |
 | `skills/` | 3 个 skill：`dsh-plugin-new`、`dsh-plugin-sandbox`、`dsh-plugin-fix-error` | 源 |
 | `templates/bundle/` | 生成插件包的模板 + `recipe.json` 方案 | 源 |
 | `docs/contracts/tools.json` | 工具契约的**生成物** | `scripts/gen-tools-contract.mjs` |

@@ -37,7 +37,7 @@ const ctx = {
 
 apply(ctx)
 const names = [...registered.keys()].sort()
-if (names.length !== 7) throw new Error(`expected 7 tools, got ${names.join(', ') || 'none'}`)
+if (names.length !== 8) throw new Error(`expected 8 tools, got ${names.join(', ') || 'none'}`)
 if (guards.length !== 1) throw new Error(`expected 1 guard, got ${guards.length}`)
 console.log(`registered: ${names.join(', ')} (+1 guard)\n`)
 

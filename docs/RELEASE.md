@@ -92,6 +92,20 @@ node scripts/release.mjs publish . --yes             # 本地发，没有 proven
 
 `link:` 不是发版——它把宿主绑在你的工作目录上。真正发版必须落到前两种之一。
 
+### 先把仓库放到 GitHub 上
+
+CI 发版跑在 GitHub 上，所以前两种形态都先要有一个仓库。这一步也是工具化的（`dsh_repo`）：
+
+```powershell
+node scripts/repo.mjs plan .          # 只读：打印它将会跑的 gh 命令
+node scripts/repo.mjs create . --owner <owner>   # 还没有 origin：建仓库 + 首次推送
+node scripts/repo.mjs update .        # 已经有 origin：只对齐可见性 / topic / repository 字段
+```
+
+两个默认值是这个仓库的约定：**公开**、带 **`dsh-plugin` topic**——市场的发现靠这个 topic，默认 private 等于让插件找不到。
+
+`update` **不推送**：它只把 `package.json` 的 `repository` 对齐成单独一个提交，推不推你决定。已经对齐时它什么都不做。
+
 ## 1. 静态检查
 
 ```powershell

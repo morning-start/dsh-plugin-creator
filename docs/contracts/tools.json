@@ -1,7 +1,7 @@
 {
   "generatedBy": "scripts/gen-tools-contract.mjs",
   "note": "Generated from tools/index.js. Do not edit by hand; run the generator and commit the diff.",
-  "count": 7,
+  "count": 8,
   "tools": [
     {
       "name": "dsh_plugin_adopt",
@@ -630,6 +630,89 @@
           "source",
           "summary",
           "checks"
+        ]
+      }
+    },
+    {
+      "name": "dsh_repo",
+      "description": "Put a plugin project on GitHub. `plan` reads the current state and prints the exact gh commands it would run, changing nothing. `create` is for a directory with no `origin`: git init, declare `repository` in package.json, `gh repo create <owner>/<repo> --public --source . --remote origin --push`, then add the `dsh-plugin` topic — a plugin repository is public by default because that topic is how the plugin market finds it. `update` is for a directory that already points at GitHub: change the visibility only when it differs from the target, add the topic (idempotent), and align package.json's `repository` in its own commit — it never pushes, so publishing the commit stays your call.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": [
+              "plan",
+              "create",
+              "update"
+            ],
+            "description": "plan: read-only preview of the commands; create: no origin yet; update: already on GitHub."
+          },
+          "path": {
+            "type": "string",
+            "description": "The project directory. Absolute."
+          },
+          "owner": {
+            "type": "string",
+            "description": "For create: the GitHub account or organisation that will own the repository."
+          },
+          "repo": {
+            "type": "string",
+            "description": "For create: the repository name. Defaults to package.json name without its scope."
+          },
+          "visibility": {
+            "type": "string",
+            "enum": [
+              "public",
+              "private",
+              "internal"
+            ],
+            "description": "Target visibility. Defaults to public, which is what makes a plugin discoverable."
+          },
+          "topic": {
+            "type": "string",
+            "description": "The repository topic. Defaults to dsh-plugin, the one the market discovers."
+          },
+          "description": {
+            "type": "string",
+            "description": "Optional repository description to set on GitHub."
+          },
+          "dryRun": {
+            "type": "boolean",
+            "description": "Report the steps without running them."
+          },
+          "commit": {
+            "type": "boolean",
+            "description": "For update: commit the package.json change. Defaults to true; the commit is never pushed."
+          }
+        },
+        "required": [
+          "action",
+          "path"
+        ]
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "action": {
+            "type": "string"
+          },
+          "ok": {
+            "type": "boolean"
+          },
+          "summary": {
+            "type": "string"
+          },
+          "data": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        },
+        "required": [
+          "action",
+          "ok",
+          "summary",
+          "data"
         ]
       }
     },

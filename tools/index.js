@@ -21,6 +21,7 @@ import { applyAdoption, auditProject, planAdoption } from '../lib/adopt.js'
 import { scaffold } from '../lib/scaffold.js'
 import { Sandboxes } from '../lib/sandbox.js'
 import { bumpVersion, inspectRelease, packRelease, rehearseRelease } from '../lib/release.js'
+import { createRepository, planRepository, updateRepository } from '../lib/repo.js'
 import { openPage, runAssertions, stopChrome } from '../lib/ui.js'
 import { RULE_TYPES, runProjectChecks } from '../lib/checks.js'
 
@@ -37,6 +38,7 @@ export function apply(ctx) {
   ctx.effect(() => ctx.tools.register(pluginNew(() => sessionDirectory(ctx))), 'dsh-plugin-creator/dsh_plugin_new')
   ctx.effect(() => ctx.tools.register(sandboxTool(() => sessionDirectory(ctx))), 'dsh-plugin-creator/dsh_sandbox')
   ctx.effect(() => ctx.tools.register(releaseTool), 'dsh-plugin-creator/dsh_plugin_release')
+  ctx.effect(() => ctx.tools.register(repoTool), 'dsh-plugin-creator/dsh_repo')
   ctx.effect(() => ctx.tools.register(uiTool(() => sessionDirectory(ctx))), 'dsh-plugin-creator/dsh_plugin_ui')
   ctx.effect(() => ctx.tools.register(adoptTool(() => sessionDirectory(ctx))), 'dsh-plugin-creator/dsh_plugin_adopt')
   ctx.effect(() => ctx.tools.guard(localInstallGuard), 'dsh-plugin-creator/no-local-install')
@@ -628,6 +630,115 @@ const releaseTool = {
       lines.push(`  rollback: ${result.rollback}`)
       lines.push(`  publish:  ${result.publish}`)
       return { action, ok: result.ok, summary: lines.join('\n'), data: result }
+    }
+
+    throw new Error(`unknown action "${action}"`)
+  },
+}
+
+/**
+ * Put the project on GitHub, or align the repository it already points at.
+ *
+ * The two situations are genuinely different and mixing them is how a project
+ * ends up with a stray second repository: `create` is for a directory with no
+ * origin, `update` for one that already has a GitHub remote. `update` never
+ * pushes — preparing a commit and publishing it are separate decisions.
+ */
+const repoTool = {
+  name: 'dsh_repo',
+  description:
+    'Put a plugin project on GitHub. `plan` reads the current state and prints the exact gh commands it would run, changing nothing. `create` is for a directory with no `origin`: git init, declare `repository` in package.json, `gh repo create <owner>/<repo> --public --source . --remote origin --push`, then add the `dsh-plugin` topic — a plugin repository is public by default because that topic is how the plugin market finds it. `update` is for a directory that already points at GitHub: change the visibility only when it differs from the target, add the topic (idempotent), and align package.json\'s `repository` in its own commit — it never pushes, so publishing the commit stays your call.',
+  parameters: {
+    type: 'object',
+    properties: {
+      action: {
+        type: 'string',
+        enum: ['plan', 'create', 'update'],
+        description: 'plan: read-only preview of the commands; create: no origin yet; update: already on GitHub.',
+      },
+      path: { type: 'string', description: 'The project directory. Absolute.' },
+      owner: { type: 'string', description: 'For create: the GitHub account or organisation that will own the repository.' },
+      repo: { type: 'string', description: 'For create: the repository name. Defaults to package.json name without its scope.' },
+      visibility: {
+        type: 'string',
+        enum: ['public', 'private', 'internal'],
+        description: 'Target visibility. Defaults to public, which is what makes a plugin discoverable.',
+      },
+      topic: { type: 'string', description: 'The repository topic. Defaults to dsh-plugin, the one the market discovers.' },
+      description: { type: 'string', description: 'Optional repository description to set on GitHub.' },
+      dryRun: { type: 'boolean', description: 'Report the steps without running them.' },
+      commit: { type: 'boolean', description: 'For update: commit the package.json change. Defaults to true; the commit is never pushed.' },
+    },
+    required: ['action', 'path'],
+  },
+  output: {
+    schema: {
+      type: 'object',
+      properties: {
+        action: { type: 'string' },
+        ok: { type: 'boolean' },
+        summary: { type: 'string' },
+        data: { type: 'object', additionalProperties: true },
+      },
+      required: ['action', 'ok', 'summary', 'data'],
+    },
+    render: (_args, value) => [{ type: 'text', text: value.summary }],
+  },
+  async execute(args) {
+    const action = String(args.action)
+    const path = resolve(String(args.path))
+    const options = {
+      owner: args.owner === undefined ? undefined : String(args.owner),
+      repo: args.repo === undefined ? undefined : String(args.repo),
+      visibility: args.visibility === undefined ? undefined : String(args.visibility),
+      topic: args.topic === undefined ? undefined : String(args.topic),
+      description: args.description === undefined ? undefined : String(args.description),
+      dryRun: args.dryRun === true,
+      commit: args.commit !== false,
+    }
+
+    if (action === 'plan') {
+      const plan = planRepository(path, options)
+      const lines = [
+        `${path}`,
+        `${plan.action} ${plan.target ?? '(unknown target)'} — visibility ${plan.visibility}, topic ${plan.topic}`,
+      ]
+      if (plan.problem !== undefined) {
+        lines.push('', `blocked: ${plan.problem}`)
+        return { action, ok: false, summary: lines.join('\n'), data: plan }
+      }
+      lines.push(...(plan.steps.length === 0 ? ['', '(nothing to change)'] : ['', ...plan.steps.map(step => `  ${step}`)]))
+      return { action, ok: true, summary: lines.join('\n'), data: plan }
+    }
+
+    if (action === 'create') {
+      const result = createRepository(path, options)
+      const lines = [`${path}`]
+      for (const step of result.steps) {
+        lines.push(`${step.ok === false ? 'FAIL' : 'ok  '} ${step.step}${step.detail === undefined || step.detail === '' ? '' : `  — ${step.detail}`}`)
+      }
+      if (result.url !== undefined) lines.push('', result.url)
+      if (result.ok !== true) lines.push('', `stopped at ${result.failedAt}. Nothing after it ran.`)
+      return { action, ok: result.ok === true, summary: lines.join('\n'), data: result }
+    }
+
+    if (action === 'update') {
+      const result = updateRepository(path, options)
+      if (result.unchanged === true) {
+        return {
+          action,
+          ok: true,
+          summary: `${path}\n${result.url ?? ''} is already aligned; nothing to change.`,
+          data: result,
+        }
+      }
+      const lines = [`${path}`]
+      if (result.dryRun === true) lines.push('dry run: nothing was changed.')
+      for (const step of result.steps) {
+        lines.push(`${step.ok === false ? 'FAIL' : 'ok  '} ${step.step}${step.detail === undefined || step.detail === '' ? '' : `  — ${step.detail}`}`)
+      }
+      if (result.url !== undefined) lines.push('', result.url)
+      return { action, ok: result.ok === true, summary: lines.join('\n'), data: result }
     }
 
     throw new Error(`unknown action "${action}"`)
