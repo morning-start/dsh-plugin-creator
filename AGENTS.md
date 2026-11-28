@@ -109,7 +109,7 @@ dsh --profile iso-creator --host 127.0.0.1 --port 3099 --no-open
 3. **交给会话的消息必须是完整 `UserMessage`。** 用 `createUserMessage` 等构造函数，它们内部补 `randomUUID()`。手写字面量在写入时不报错，在用户下次打开会话时炸掉整个历史。
 4. **自定义持久事件必须先 augment `SessionEventMap`**，否则 `session.append` 拒绝未知类型。
 5. **`package.json` 的 `dsh` 字段只写宿主认的键**：`bundle` / `client` / `profile`。自造字段（如 `manifestVersion`）宿主完全不读，只会误导下一个人。
-6. **发版只走 tag，且不存 npm token。** 改版本（`dsh_plugin_release` 的 `version` 动作，或手改 `package.json`）→ 提交 → `git tag vX.Y.Z` → `git push origin vX.Y.Z`，其余交给 CI。publish 凭据由 OIDC 现场换（trusted publishing），仓库里没有长期密钥；要一次性在 npm 上配 Trusted Publisher，workflow 文件名绑在那里，改名要同步改。生成的插件项目自带这份 workflow 与四步说明——**改模板时不要把它改成需要 token 的版本**，`release:pipeline` 规则会红。
+6. **发版只走 tag，且不存 npm token。** 改版本（`dsh_plugin_release` 的 `version` 动作，或手改 `package.json`）→ 提交 → `git tag vX.Y.Z` → `git push origin vX.Y.Z`，其余交给 CI。publish 凭据由 OIDC 现场换（trusted publishing），仓库里没有长期密钥；要一次性在 npm 上配 Trusted Publisher，workflow 文件名绑在那里，改名要同步改。**唯一的例外是全新包的第一次发布**：Trusted Publisher 只能配在已存在的包上，所以第一次必须本地 `publish --yes`（要本机 token，且没有 provenance），配好之后把 token 删掉、以后只走 tag。生成的插件项目自带这份 workflow 与四步说明——**改模板时不要把它改成需要 token 的版本**，`release:pipeline` 规则会红。
 7. **`errors/` 自己不被扫。** 卡片正文里写着反例，规则和检查必须跳过这个目录，否则文档会把自己报成错误。加新规则时保留这条豁免。
 8. **新检查必须先红后绿。** 在 `scripts/try-checks.mjs` 里加一个反例，**确认它报红**，再让它变绿。规则通过但反例不红，等于没有检查。
 9. **一个错误一条检查。** 写不出一套正例/反例的「注意事项」，是没想清楚，不是检查难写。

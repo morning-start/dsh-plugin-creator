@@ -73,6 +73,21 @@ Settings → **Trusted Publisher** → GitHub Actions, workflow filename
 `release.yml`. Until that is saved, the publish step **fails to authenticate**
 rather than silently succeeding.
 
+**The very first publish has to be local.** A Trusted Publisher can only be
+configured on a package that already exists, so for a brand-new name this flow
+starts one step earlier — once:
+
+```
+npm login                                            # or NODE_AUTH_TOKEN in the environment
+node <dsh-plugin-creator>/scripts/release.mjs check .
+node <dsh-plugin-creator>/scripts/release.mjs publish . --yes   # no provenance; unavoidable
+# then: npmjs.com -> Settings -> Trusted Publisher, workflow filename release.yml
+```
+
+After that, delete the token and use the tag flow above for every release.
+`npm view <name> version` answering means the package exists and you are past the
+bootstrap; a 404 means you have not bootstrapped yet.
+
 `checks.json` guards the pipeline itself (`release:pipeline`): a workflow that
 loses the tag trigger, the version reconciliation, the concurrency group, or
 that starts reading a stored registry token fails the check — so the standard

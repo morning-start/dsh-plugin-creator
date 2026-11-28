@@ -177,6 +177,11 @@ try {
     check(`${label}: the README carries the four release steps`,
       ['git tag v', 'git push origin', 'Trusted Publisher', 'release.yml'].every(marker => readme.includes(marker)),
       readme.slice(readme.indexOf('## Releasing'), readme.indexOf('## Next steps')).slice(0, 200))
+    // A Trusted Publisher can only be attached to a package that already exists,
+    // so the README has to say the first publish is local — otherwise a new
+    // project's first tag fails authentication with no explanation.
+    check(`${label}: the README explains the first local publish`,
+      /first publish has to be local/i.test(readme) && /npm login/.test(readme))
     const workflow = readFileSync(join(dest, '.github', 'workflows', 'release.yml'), 'utf8')
     check(`${label}: the shipped workflow stores no registry token`, !/NPM_TOKEN|NODE_AUTH_TOKEN/.test(workflow))
     check(`${label}: the shipped workflow is tag-triggered with OIDC`,

@@ -6,6 +6,8 @@
 
 **不要手打 `npm publish`，不要手建 GitHub Release。** 发版只有一个动作：推一个 `v*` 标签。
 
+> **唯一的例外是第一次发布**——见下面 [引导：第一次发布](#引导第一次发布只能本地发一次)。Trusted Publisher 只能配在**已经存在**的包上，所以新包必须先本地发一次。
+
 ```powershell
 # 1. 改版本号——这是唯一需要手改 package.json 的地方，也可以用工具改
 dsh_plugin_release { action: 'version', path: '.', part: 'patch' }
@@ -40,7 +42,7 @@ check → pack → publish → release → verify(advisory)
 
 **为什么必须是 CI**：
 
-- **provenance 只有 CI 有**。`npm publish --provenance` 用 OIDC 身份证明「这个包是从哪个仓库、哪次提交构建的」。本地发版没有这个身份，签名是空的。
+- **provenance 只有 CI 有**。`npm publish --provenance` 用 OIDC 身份证明「这个包是从哪个仓库、哪次提交构建的」。本地发版没有这个身份，签名是空的——**引导那一次是唯一的例外，它发出的版本没有 provenance，补不回来**。
 - **凭据不落盘**。OIDC 每次运行换一张短期票，仓库里没有可泄露的长期密钥。
 - **版本↔标签只在推标签那一刻对账**。本地永远不知道你要打什么 tag。
 - **并发只有 `concurrency` 能挡**。两个 tag 推得近，两个 run 同时 publish，后完成的会把 `latest` 覆盖回旧版本。
@@ -52,6 +54,33 @@ check → pack → publish → release → verify(advisory)
 ```powershell
 node scripts/check-project.mjs --only release:pipeline
 ```
+
+### 引导：第一次发布只能本地发一次
+
+**不是所有项目都直接跳到 CI。** npm 的 Trusted Publisher 配在**一个已经存在的包**上——包还没发过，Settings 里就没有那一栏可配。所以全新包必须先本地发一次，拿到「这个包存在」这个前提：
+
+```powershell
+# 一次性：本机要有 npm 登录，或环境变量里有 NPM_TOKEN（只这一次需要）
+npm login                                            # 或 $env:NODE_AUTH_TOKEN = '<token>'
+
+node scripts/release.mjs check .                     # 发之前先自查
+node scripts/release.mjs publish . --yes             # 本地发，没有 provenance（这一步无法避免）
+
+# 然后去 npmjs.com → 该包 → Settings → Trusted Publisher → GitHub Actions
+#   Repository owner / name 填好，Workflow filename 填 release.yml，Environment 留空
+```
+
+配好之后，**把这个 token 从本机、从仓库都删掉**——后续版本全部由 tag 触发 CI，CI 用 OIDC 现场换票，不再需要任何 token。
+
+| 前提 | 谁来提供 | 之后还要吗 |
+|---|---|---|
+| 包名已在 npm 上存在 | 第一次本地 `publish`（要 token） | 不需要，包已存在 |
+| 发布凭据 | 第一次：本机 token；之后：CI 的 OIDC | 之后不需要 token |
+| `release.yml` 的存在与形状 | 生成的插件项目自带 | 一直需要，`release:pipeline` 规则守着 |
+
+**判断自己走到哪一步了**：`npm view <name> version` 有输出 → 包已存在，可以只走 tag；报 404 → 还没引导过，先本地发一次。
+
+这条也是 `ship` / `publish` 存在的理由：它们是**引导工具**，不是日常发版方式。日常只有 tag。
 
 ## 0. 先选分发形态
 
@@ -111,14 +140,14 @@ node scripts/release.mjs rehearse . --sandbox rollback
 
 **标准路径就是本文件开头那四行**——改版本、提交、打 tag、推 tag。没有别的。
 
-`ship` 是**补救与离线路径**，不是日常发版：
+`ship` 是**引导与补救路径**，不是日常发版：
 
 ```powershell
 node scripts/release.mjs ship . --dry-run    # 看它要做什么
 node scripts/release.mjs ship . --yes        # 真发；不可撤销，所以必须显式 --yes
 ```
 
-什么时候才用它：CI 不可用、需要在一个没有 Actions 的环境里发、或者要**本地演练一遍**发布链路。用它发出去的包**没有 provenance**——这是它的代价，不是它的缺陷，但也不该是默认。
+什么时候才用它：**全新包名的第一次发布**（必须先本地发，才能配 Trusted Publisher）、CI 不可用、需要在一个没有 Actions 的环境里发、或者要**本地演练一遍**发布链路。用它发出去的包**没有 provenance**——这是它的代价，不是它的缺陷，但也不该是默认。
 
 五步顺序是**在真实 registry 上撞出来的**，不是设计出来的（CI 用的是同一套语义）：
 

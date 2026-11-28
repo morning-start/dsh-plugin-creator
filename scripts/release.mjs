@@ -139,6 +139,9 @@ async function main() {
       else if (!result.dryRun) {
         console.log(`\nNext: node scripts/release.mjs verify . --version ${result.version}`)
         console.log('      node scripts/release.mjs gh-release . --tarball tmp/release/<name>.tgz')
+        console.log('\nIf this was a brand-new package, it is now bootstrapped: configure')
+        console.log('npmjs.com -> the package -> Settings -> Trusted Publisher (GitHub Actions,')
+        console.log('workflow release.yml), delete the local token, and release by tag from now on.')
       }
       return
     }
@@ -219,7 +222,9 @@ async function main() {
   node scripts/release.mjs rehearse [dir] [--sandbox rollback] [--project <dir>]
                                                        install it in a sandbox and read the config back
   node scripts/release.mjs publish [dir] [--tag latest] [--dry-run] [--yes]
-                                                       publish to the registry (npm, else the DSH runtime's pnpm)
+                                                       publish from this machine — the **bootstrap** for a
+                                                       brand-new package name only; no provenance
+                                                       (everyday releases are a tag push, which CI publishes)
   node scripts/release.mjs verify [dir] [--version <v>] [--tag latest] [--registry <url>]
                                                        is the published version actually installable yet
   node scripts/release.mjs gh-release [dir] [--tag v<v>] [--tarball <file>] [--draft] [--notes <file>] [--dry-run]
