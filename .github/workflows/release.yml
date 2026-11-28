@@ -109,11 +109,17 @@ jobs:
           fi
           name=$(node -p "require('./package.json').name")
           version=$(node -p "require('./package.json').version")
-          if npm publish --provenance --access public; then
+          if npm publish --provenance --access public 2>&1 | tee /tmp/publish.log; then
             echo "published $name@$version"
             exit 0
           fi
-          echo "::error::$name@$version was not published. If npm says the version already exists, it is already out: bump package.json and push a NEW tag — a published version cannot be overwritten, and moving the old tag makes the tag's meaning untrustworthy."
+          if grep -qiE 'E404|ENEEDAUTH|401|403|not authorized|unauthenticated' /tmp/publish.log; then
+            echo "::error::the registry did not accept this job's OIDC identity. This package needs a Trusted Publisher: npmjs.com -> the package -> Settings -> Trusted Publisher -> GitHub Actions, with workflow filename release.yml. Until that is saved, npm treats the publish as anonymous and answers 404."
+          elif grep -qi 'cannot publish over the previously published versions' /tmp/publish.log; then
+            echo "::error::$name@$version is already in the registry. A published version cannot be overwritten: bump package.json and push a NEW tag."
+          else
+            echo "::error::publishing $name@$version failed; see the npm output above."
+          fi
           exit 1
 
       - name: Create the GitHub Release
