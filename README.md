@@ -1,4 +1,4 @@
-# dsh-plugin-creator
+# @morning-start/dsh-plugin-creator
 
 ![三个 bundle 文件流进一个通过的勾](docs/preview.svg)
 
@@ -154,7 +154,7 @@ JSON 也由模板渲染，`{{name|json}}` 负责转义，于是「生成什么�
 
 bundle patch（`cordis.patch.yml`）覆写出厂的 `preset-cordis` 行，并在插件列表末尾追加两行：
 
-- `creator-tools` → `dsh-plugin-creator/tools`，在这个预设的上下文里注册工具；
+- `creator-tools` → `@morning-start/dsh-plugin-creator/tools`，在这个预设的上下文里注册工具；
 - `creator-skills` → 第二个 `@deepseek-ai/dsh-skill-filesystem` 提供者，`includeDefaultRoots: false`，`customSkillDirs` 指向本包 `skills/`。
 
 patch 还插入一行 Host 行 `creator-host`：它今天不注册任何东西，存在的意义是让这个 bundle 在 Plugin Manager 里有一个稳定的身份行。卸载会移除整个 patch 层，`preset-cordis` 回落到出厂声明，工具与 skill 一并消失。其他预设既没有被 patch，也没有被复述。

@@ -89,7 +89,7 @@ dsh_plugin_new({
 ## 5. 装与验（说清楚哪些验过、哪些没验）
 
 **刚生成的插件是「开发中」的，只能装进沙盒。** 装进当前环境的风险是把用户正在用的宿主搞成带伤启动；
-`dsh-plugin-creator` 的 guard 会直接拒绝本地目录安装（`install_bundle` 的目录 target、`dsh plugin add link:`），
+`@morning-start/dsh-plugin-creator` 的 guard 会直接拒绝本地目录安装（`install_bundle` 的目录 target、`dsh plugin add link:`），
 除非那个宿主本身就是沙盒。被拒不要绕，去开沙盒或问用户。
 
 1. 沙盒里装：`dsh_sandbox { action: 'create', name: 'dev', plugin: '<生成的目录>' }` →

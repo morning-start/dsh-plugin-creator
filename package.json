@@ -1,6 +1,6 @@
 {
-  "name": "dsh-plugin-creator",
-  "version": "0.5.2",
+  "name": "@morning-start/dsh-plugin-creator",
+  "version": "0.6.0",
   "type": "module",
   "description": "Plugin-development toolkit for DeepSeek Harness: adds bundle and skill checks plus bundled skills to Creator mode only.",
   "repository": {
