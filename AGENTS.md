@@ -35,14 +35,17 @@ node scripts/try-release.mjs     # 就绪检查、打包、发布、演练
 
 `try-tool.mjs` 同时是模板的回归：生成的 bundle 通不过自己的结构检查它就失败——一次破坏产物的模板改动，不用安装任何东西就能抓到。
 
-### 要用宿主的两项
+### 要用宿主的三项
 
 `check-patch.mjs` 用 DSH 同款 YAML 库解析 patch，并与 `@deepseek-ai/dsh-web-app/presets/cordis.patch.yml` 比对（漏行、行序变化、plan-mode 段落被改、意外新增都会失败）。桌面版里那个文件在 `app.asar` 内，所以要用 DSH 的运行时跑：
 
 ```powershell
 $env:ELECTRON_RUN_AS_NODE = "1"
 & $env:DSH_NODE_EXECUTABLE scripts\check-patch.mjs .
+& $env:DSH_NODE_EXECUTABLE scripts\verify-workflow.mjs   # release.yml + 模板能否被 YAML 解析
 ```
+
+`verify-workflow.mjs` 用同一个 YAML 库解析发版工作流与它的模板，并断言 `on.push.tags` 有 `v*`、`permissions.id-token` 是 `write`、有 concurrency group——**手写缩进把 workflow 弄坏时，在推 tag 之前就红**，而不是等 CI 里神秘失败。
 
 改动用**隔离实例**验证，别用桌面端（流程见 `skills/dsh-plugin-sandbox`）：
 
@@ -106,7 +109,7 @@ dsh --profile iso-creator --host 127.0.0.1 --port 3099 --no-open
 3. **交给会话的消息必须是完整 `UserMessage`。** 用 `createUserMessage` 等构造函数，它们内部补 `randomUUID()`。手写字面量在写入时不报错，在用户下次打开会话时炸掉整个历史。
 4. **自定义持久事件必须先 augment `SessionEventMap`**，否则 `session.append` 拒绝未知类型。
 5. **`package.json` 的 `dsh` 字段只写宿主认的键**：`bundle` / `client` / `profile`。自造字段（如 `manifestVersion`）宿主完全不读，只会误导下一个人。
-6. **发版只走 tag。** 改 `package.json` 版本 → 提交 → `git tag vX.Y.Z` → `git push origin vX.Y.Z`，其余交给 CI。不要手打 `npm publish`（没有 provenance），不要手建 Release。
+6. **发版只走 tag，且不存 npm token。** 改 `package.json` 版本 → 提交 → `git tag vX.Y.Z` → `git push origin vX.Y.Z`，其余交给 CI。publish 凭据由 OIDC 现场换（trusted publishing），仓库里没有长期密钥；要一次性在 npm 上配 Trusted Publisher，workflow 文件名绑在那里，改名要同步改。不要手打 `npm publish`（没有 provenance），不要手建 Release。
 7. **`errors/` 自己不被扫。** 卡片正文里写着反例，规则和检查必须跳过这个目录，否则文档会把自己报成错误。加新规则时保留这条豁免。
 8. **新检查必须先红后绿。** 在 `scripts/try-checks.mjs` 里加一个反例，**确认它报红**，再让它变绿。规则通过但反例不红，等于没有检查。
 9. **一个错误一条检查。** 写不出一套正例/反例的「注意事项」，是没想清楚，不是检查难写。

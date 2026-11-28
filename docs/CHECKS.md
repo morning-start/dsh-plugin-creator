@@ -174,17 +174,21 @@ markdown 里的**相对链接**必须解析得到。跳过 `http(s)://`、`mailt
 
 ### `release-pipeline`
 
-发版只能是**推 `v*` 标签 → CI 全包**。这条规则查 workflow 有没有把那条链路接好，五件事：
+发版只能是**推 `v*` 标签 → CI 全包**。这条规则查 workflow 有没有把那条链路接好，七件事：
 
 1. **tag 触发**：`on.push.tags: ['v*']`——不是靠人记得跑命令；
 2. **版本对账**：有步骤把 `GITHUB_REF_NAME` 和 `package.json` 的版本比一遍；
 3. **registry 发布**：有 `npm publish` / `pnpm publish`；
 4. **GitHub Release**：有 `gh release create`；
-5. **concurrency group**：两个 tag 一起推时串行化，否则后完成的把 `latest` 覆盖回旧版本。
+5. **concurrency group**：所有发版共用一个 group，两个 tag 一起推时串行化；
+6. **不读存起来的 token**：出现 `NPM_TOKEN` / `NODE_AUTH_TOKEN` 就报红——凭据应当由 OIDC 现场换；
+7. **有 `id-token: write`**：trusted publishing 与 provenance 都要这个身份。
 
 ```jsonc
 { "id": "release:pipeline", "type": "release-pipeline", "workflow": ".github/workflows/release.yml" }
 ```
+
+第 5 条有个坑：`group: release-${{ github.ref }}` 看起来「按 ref 分组更精细」，实际每个 tag 各成一组，等于没串行——同事就是这样把 `latest` 弄反的。必须是一个固定 group。
 
 只管**链路在不在**，不管这次发版对不对——版本↔标签的对账在 CI 里跑（`release:tag` 只能在 HEAD 已有 tag 时比）。
 

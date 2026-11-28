@@ -26,24 +26,26 @@ check → pack → publish → release → verify(advisory)
 
 | CI 步骤 | 判据 |
 |---|---|
+| npm must be new enough | trusted publishing 要 npm ≥ 11.5.1 |
 | The tag must match package.json | `v0.5.0` 与 `package.json` 的 `0.5.0` 不一致直接失败 |
 | The package must be installable | 有 `dsh.bundle.patch` |
 | Readiness check | 本仓库跑 `release check` |
-| Suites | 本仓库跑全部回归 |
+| Suites | 本仓库跑 CI 能跑的回归（`try-ui` 要真浏览器，不在里面） |
 | Pack | `npm pack`，复制成**不带版本号**的资产名 |
-| Publish to the registry | `npm publish --provenance`；版本已存在时退化为 `dist-tag add`，不判失败 |
+| Publish to the registry | `npm publish --provenance`，凭据由 OIDC 现场换，**仓库不存 token**；版本已存在则失败并说明下一步 |
 | Create the GitHub Release | `gh release create`；已存在就跳过 |
 | Registry propagation | advisory，registry 慢不撤销已经发生的发布 |
 
 **为什么必须是 CI**：
 
 - **provenance 只有 CI 有**。`npm publish --provenance` 用 OIDC 身份证明「这个包是从哪个仓库、哪次提交构建的」。本地发版没有这个身份，签名是空的。
+- **凭据不落盘**。OIDC 每次运行换一张短期票，仓库里没有可泄露的长期密钥。
 - **版本↔标签只在推标签那一刻对账**。本地永远不知道你要打什么 tag。
 - **并发只有 `concurrency` 能挡**。两个 tag 推得近，两个 run 同时 publish，后完成的会把 `latest` 覆盖回旧版本。
 
 `node scripts/release.mjs check .` 仍然要做，但它是**发版前的自查**（打 tag 之前跑），不是发版动作。
 
-这条流程由 `release:pipeline` 规则守着——workflow 丢了 tag 触发器、少了版本对账、少了 publish / Release 步骤、或者没有 concurrency group，检查就会红：
+这条流程由 `release:pipeline` 规则守着——workflow 丢了 tag 触发器、少了版本对账、少了 publish / Release 步骤、没有 concurrency group、**或者要一个存起来的 registry token**，检查就会红：
 
 ```powershell
 node scripts/check-project.mjs --only release:pipeline
@@ -160,8 +162,9 @@ git push origin v0.1.0
 |---|---|
 | 标签与版本一致 | `v1.2.0` 必须对应 `package.json` 的 `1.2.0`——防止打了 tag 忘了改版本 |
 | 包是可安装的 | 有 `dsh.bundle.patch`；本仓库额外跑 `release check` 和全部 `scripts/try-*.mjs` 回归 |
+| npm 版本够新 | trusted publishing 要求 npm ≥ 11.5.1，首步升到最新并校验 |
 | 打包 | `npm pack`，然后复制成**不带版本号**的资产名 |
-| 发 registry（可选） | 配了 `NPM_TOKEN` 且 `private !== true` 才发，发完跑 `verify` |
+| 发 registry | `npm publish --provenance --access public`；`private: true` 时跳过 |
 | 建 GitHub Release | `gh release create <tag> <asset> --generate-notes` |
 
 两个刻意的设计：
@@ -169,7 +172,26 @@ git push origin v0.1.0
 - **资产名不带版本号**（`<name>.tgz`）。市场的 `tarball:` 常写 `releases/latest/download/<name>.tgz`，那里 tag 在请求时解析、文件名照字面取——带版本号下次发版就 404。
 - **`private: true` 时跳过 registry 步骤**而不是报错。本地 bundle 用 GitHub Release 分发就够了，不该因为没配 npm 就发不出去。
 
-`NPM_TOKEN` 放在仓库的 Actions secrets 里；没有它工作流照样跑，只是不发 npm。
+### 不需要 npm token：OIDC trusted publishing
+
+**仓库里不存任何 registry 凭据。** `npm publish` 运行时用这个 job 的 OIDC 身份，向 npm 换一张**短期**、而且只对「这个仓库 + 这个 workflow」有效的凭据。跑完即失效，所以不存在能泄露的长期密钥，也没有要轮换的东西。
+
+这也是 `release:pipeline` 规则会查的：workflow 里出现 `NPM_TOKEN` / `NODE_AUTH_TOKEN` 就报红，缺 `id-token: write` 也报红。
+
+一次性设置（**每个包一次**）：npmjs.com → 这个包 → Settings → **Trusted Publisher** → GitHub Actions，填
+
+| 字段 | 值 |
+|---|---|
+| Repository owner | `<owner>` |
+| Repository name | `<repo>` |
+| Workflow filename | `release.yml` |
+| Environment | 留空 |
+
+**workflow 文件名绑在 publisher 配置里**——以后重命名 `release.yml`，必须同步去 npm 改，否则下次发版认证失败。
+
+没配好之前，publish 那步会**直接认证失败**，不会静默成功。这是有意的：宁可发不出去，也不发一个来历不明的包。
+
+什么时候才需要 token：用不了 OIDC 的时候（私有 registry、self-hosted runner）。那时才加 `NPM_TOKEN` secret，并接受它是长期有效的、需要轮换——能不用就别用。
 
 ## 5. 装到真实 profile
 
@@ -194,13 +216,16 @@ dsh plugin --profile <profile> add <name>@<上一版版本>
 
 ## 6.5 手工发过之后怎么补救
 
-已经绕过 CI 发过一次，按这三种情况处理：
+已经绕过 CI 发过一次，按这四种情况处理：
 
 | 情况 | 怎么办 |
 |---|---|
-| **包发了，`latest` 指错了** | 不要重发同一版本（`npm publish` 会 403）。在含幂等修复的提交上跑 `gh workflow run release.yml --ref vX.Y.Z`——publish 那步会退化成 `npm dist-tag add <pkg>@<ver> latest`，把 `latest` 摆正后继续建 Release |
+| **包发了，`latest` 指错了** | `npm dist-tag add <name>@<ver> latest`。这一步需要登录 npm，CI 的 OIDC 票只覆盖 `publish`，覆盖不了 dist-tag |
 | **版本号错了** | 改 `package.json` → 提交 → 打**新**标签。**不要移动旧标签**：标签一旦被消费（Release 已建、包已发），移动它会让「这个标签指向什么」变得不可信 |
+| **CI 里 publish 说版本已存在** | 这个版本已经在 registry 上了。改 `package.json` 发新版本，不要重推同一个 tag |
 | **发出去的包没有 provenance** | 无法补。下一代版本走 CI 就会有，已经发出的那一个改不了 |
+
+`concurrency: group: release` 让所有发版串行，所以「两个 tag 一起推、`latest` 被覆盖」这类事故不会再发生——它是被串行化挡掉的，不是靠事后修。
 
 ## 7. 发布后对账
 

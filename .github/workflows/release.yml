@@ -5,6 +5,21 @@ name: Release
 # this repository's own tooling are skipped when that tooling is absent.
 #
 #   git tag v1.0.0 && git push origin v1.0.0
+#
+# No registry token is stored anywhere. `npm publish` exchanges this job's OIDC
+# identity for a short-lived credential scoped to this repository and this
+# workflow, so there is no long-lived secret to leak or rotate.
+#
+# One-time setup, on npmjs.com -> the package -> Settings -> Trusted Publisher:
+#
+#   Provider          GitHub Actions
+#   Repository owner  <owner>
+#   Repository name   <repo>
+#   Workflow filename  release.yml      (renaming this file breaks publishing)
+#   Environment       (leave empty)
+#
+# Until that is saved, the publish step fails to authenticate — it does not
+# silently succeed.
 
 on:
   push:
@@ -13,30 +28,36 @@ on:
 
 permissions:
   contents: write
-  # npm provenance: the registry checks the OIDC identity against the repository,
-  # so the published tarball carries a signed statement of where it was built.
+  # Trusted publishing + provenance: the registry checks this OIDC identity
+  # against the repository, so the tarball carries a signed statement of where
+  # it was built — and the publish credential is minted per run.
   id-token: write
 
 concurrency:
-  group: release-${{ github.ref }}
+  # Every release shares one group on purpose. Keying on the ref would let two
+  # tags pushed together publish in parallel, and the second one repoints the
+  # `latest` dist-tag at the older version.
+  group: release
   cancel-in-progress: false
 
 jobs:
   release:
     runs-on: ubuntu-latest
-    env:
-      NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
     steps:
       - uses: actions/checkout@v7
 
       - uses: actions/setup-node@v7
         with:
-          # The LTS alias keeps this file from going stale every October; the
-          # package has no dependencies, so any supported Node runs the checks.
+          # Trusted publishing needs a supported LTS; the package has no
+          # dependencies, so any supported Node runs the checks.
           node-version: lts/*
-          # Writes an .npmrc that reads ${NODE_AUTH_TOKEN}. Without it, npm ignores
-          # the token and fails with ENEEDAUTH no matter what the secret holds.
           registry-url: https://registry.npmjs.org
+
+      - name: npm must be new enough for trusted publishing
+        run: |
+          npm install -g npm@latest
+          npm --version
+          node -e "const v=require('child_process').execSync('npm --version').toString().trim(); const [a,b]=v.split('.').map(Number); if (a<11||(a===11&&b<5)) { console.error('npm '+v+' cannot use trusted publishing; 11.5.1 or newer is required'); process.exit(1) }"
 
       - name: The tag must match package.json
         run: |
@@ -51,7 +72,6 @@ jobs:
       - name: The package must be installable
         run: |
           node -e "const m=require('./package.json'); if(!m.dsh?.bundle?.patch) { console.error('no dsh.bundle.patch: dsh plugin add would refuse this'); process.exit(1) }"
-          node -e "const m=require('./package.json'); if(m.private) console.log('private: the registry step will be skipped')"
 
       # Optional gate: present only in repositories that ship this toolkit's
       # scripts. A plain plugin package has no scripts/ and skips both steps.
@@ -78,27 +98,23 @@ jobs:
           cp ./*.tgz "dist/$asset.tgz"
           echo "ASSET=dist/$asset.tgz" >> "$GITHUB_ENV"
 
+      # No token: npm mints one from this job's OIDC identity, before the step
+      # runs. Nothing in the repository can publish on its own.
       - name: Publish to the registry
-        if: env.NPM_TOKEN != ''
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
           if node -e "process.exit(require('./package.json').private === true ? 0 : 1)"; then
             echo "package.json is private: skipping npm publish"
+            echo "SKIPPED_PUBLISH=1" >> "$GITHUB_ENV"
             exit 0
           fi
-          # Idempotent: two tags pushed in the same minute race on `latest`, and the
-          # second publish either fails (E403, version exists) or repoints `latest`
-          # at the older version. Either way the fix is `dist-tag add` this version,
-          # not a new release — so publish, and repair the tag if the version exists.
           name=$(node -p "require('./package.json').name")
           version=$(node -p "require('./package.json').version")
           if npm publish --provenance --access public; then
             echo "published $name@$version"
-          else
-            echo "publish failed; ensuring dist-tag latest -> $version"
-            npm dist-tag add "$name@$version" latest
+            exit 0
           fi
+          echo "::error::$name@$version was not published. If npm says the version already exists, it is already out: bump package.json and push a NEW tag — a published version cannot be overwritten, and moving the old tag makes the tag's meaning untrustworthy."
+          exit 1
 
       - name: Create the GitHub Release
         env:
@@ -109,13 +125,11 @@ jobs:
             && echo "release $GITHUB_REF_NAME already exists" \
             || gh release create "$GITHUB_REF_NAME" "$ASSET" --title "$GITHUB_REF_NAME" --generate-notes
 
-
       # After the release on purpose: the registry can take longer than any
       # reasonable wait to serve a brand-new version, and that lag must not hold
-      # up the tarball people install from.
+      # up the tarball people install from. Read-only (`npm view`), so it needs
+      # no credential.
       - name: Registry propagation (advisory)
-        if: env.NPM_TOKEN != '' && hashFiles('scripts/release.mjs') != ''
+        if: env.SKIPPED_PUBLISH != '1' && hashFiles('scripts/release.mjs') != ''
         continue-on-error: true
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: node scripts/release.mjs verify . --version "${GITHUB_REF_NAME#v}" --wait 600

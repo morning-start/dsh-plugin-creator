@@ -103,7 +103,7 @@ try {
   const manifest = JSON.parse(readFileSync(join(bare, 'package.json'), 'utf8'))
   check('repository comes from the git remote', manifest.repository?.url === 'git+https://github.com/owner/dsh-plugin-bare.git', JSON.stringify(manifest.repository))
   check('the workflow is the real one', readFileSync(join(bare, '.github/workflows/release.yml'), 'utf8').includes("tags: ['v*']"))
-  check('the workflow unescapes Actions contexts', readFileSync(join(bare, '.github/workflows/release.yml'), 'utf8').includes('${{ github.ref }}'))
+  check('the workflow unescapes Actions contexts', readFileSync(join(bare, '.github/workflows/release.yml'), 'utf8').includes('${{ github.token }}'))
   const checksFile = JSON.parse(readFileSync(join(bare, 'checks.json'), 'utf8'))
   check('the starter checks only hold rules the project passes', Array.isArray(checksFile.rules) && checksFile.rules.length > 0, JSON.stringify(checksFile.rules.map(rule => rule.id)))
   check('gitignore gained both entries', readFileSync(join(bare, '.gitignore'), 'utf8').includes('node_modules/') && readFileSync(join(bare, '.gitignore'), 'utf8').includes('tmp/'))

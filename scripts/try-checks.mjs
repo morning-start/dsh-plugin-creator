@@ -429,13 +429,14 @@ try {
   const workflow = (overrides = {}) => {
     const parts = {
       trigger: "on:\n  push:\n    tags: ['v*']\n",
-      concurrency: 'concurrency:\n  group: release-${{ github.ref }}\n  cancel-in-progress: false\n',
+      permissions: 'permissions:\n  contents: write\n  id-token: write\n',
+      concurrency: 'concurrency:\n  group: release\n  cancel-in-progress: false\n',
       tagCheck: '      - name: The tag must match package.json\n        run: |\n          tag="${GITHUB_REF_NAME#v}"\n          node -p "require(\'./package.json\').version"\n',
       publish: '      - name: Publish\n        run: npm publish --provenance\n',
       release: '      - name: Release\n        run: gh release create "$GITHUB_REF_NAME" x.tgz\n',
       ...overrides,
     }
-    return `name: Release\n${parts.trigger}\n${parts.concurrency}\njobs:\n  release:\n    steps:\n${parts.tagCheck}${parts.publish}${parts.release}`
+    return `name: Release\n${parts.trigger}\n${parts.permissions}\n${parts.concurrency}\njobs:\n  release:\n    steps:\n${parts.tagCheck}${parts.publish}${parts.release}`
   }
 
   writeFileSync(join(releaseRoot, '.github', 'workflows', 'release.yml'), workflow())
@@ -471,6 +472,20 @@ try {
   const noConcurrency = await runRules(releaseRoot, releaseRule)
   check('a workflow without a concurrency group fails', noConcurrency.checks[0].status === 'fail', noConcurrency.checks[0].message)
   check('the finding names the race', /race/.test(noConcurrency.checks[0].message), noConcurrency.checks[0].message)
+
+  // A long-lived registry token in the repository is the thing trusted
+  // publishing exists to remove; the pipeline must not depend on one.
+  writeFileSync(join(releaseRoot, '.github', 'workflows', 'release.yml'), workflow({
+    permissions: 'permissions:\n  contents: write\n  id-token: write\n',
+    publish: '      - name: Publish\n        env:\n          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}\n        run: npm publish --provenance\n',
+  }))
+  const storedToken = await runRules(releaseRoot, releaseRule)
+  check('a workflow that reads a stored registry token fails', storedToken.checks[0].status === 'fail', storedToken.checks[0].message)
+  check('the finding points at trusted publishing', /trusted publishing/.test(storedToken.checks[0].message), storedToken.checks[0].message)
+
+  writeFileSync(join(releaseRoot, '.github', 'workflows', 'release.yml'), workflow({ permissions: 'permissions:\n  contents: write\n' }))
+  const noOidc = await runRules(releaseRoot, releaseRule)
+  check('a workflow without id-token: write fails', noOidc.checks[0].status === 'fail', noOidc.checks[0].message)
 
   console.log('\nchecks file')
   await expectError('a missing checks file is an error', () => loadChecks(work), /no checks file/)
