@@ -170,6 +170,24 @@ markdown 里的**相对链接**必须解析得到。跳过 `http(s)://`、`mailt
 
 这条是把「hello 和原文件之间更规范」变成可执行的：**最小变体和完整变体是同一个插件的两种形态，不是两个插件**。
 
+### `release-pipeline`
+
+发版只能是**推 `v*` 标签 → CI 全包**。这条规则查 workflow 有没有把那条链路接好，五件事：
+
+1. **tag 触发**：`on.push.tags: ['v*']`——不是靠人记得跑命令；
+2. **版本对账**：有步骤把 `GITHUB_REF_NAME` 和 `package.json` 的版本比一遍；
+3. **registry 发布**：有 `npm publish` / `pnpm publish`；
+4. **GitHub Release**：有 `gh release create`；
+5. **concurrency group**：两个 tag 一起推时串行化，否则后完成的把 `latest` 覆盖回旧版本。
+
+```jsonc
+{ "id": "release:pipeline", "type": "release-pipeline", "workflow": ".github/workflows/release.yml" }
+```
+
+只管**链路在不在**，不管这次发版对不对——版本↔标签的对账在 CI 里跑（`release:tag` 只能在 HEAD 已有 tag 时比）。
+
+详见 [`errors/release-pipeline.md`](../errors/release-pipeline.md)。
+
 ### 通用规则（与方案引擎共用）
 
 `file-exists`、`file-absent`、`files-listed`、`placeholder-free`、`json-field`、`frontmatter-name`——语义见 [`SCHEMES.md`](SCHEMES.md)，同一套实现、同一套 pass/warn/fail。
@@ -219,9 +237,10 @@ markdown 里的**相对链接**必须解析得到。跳过 `http(s)://`、`mailt
 | `manifest:dsh-shape` | ✅ |
 | `inject:declared` / `depends:bare-name` / `session:custom-event` | ✅（`root: "."`，新包还没有 `lib/` 时扫到 0 个文件也算通过） |
 | `session:messages` | ✅ |
+| `release:pipeline` | ✅（生成的包带同一份 workflow） |
 | `errors:cards` / `templates:variants` | 不预置（前者要求 `errors/` 目录，后者要求 `templates/bundle/`） |
 
-模板两套（`checks.json.tpl` 无中文 / `checks.json.zh.tpl` 有中文）因此分别有 **9 / 10 条**规则。
+模板两套（`checks.json.tpl` 无中文 / `checks.json.zh.tpl` 有中文）因此分别有 **10 / 11 条**规则。
 
 两条设计取舍：
 
@@ -248,7 +267,8 @@ markdown 里的**相对链接**必须解析得到。跳过 `http(s)://`、`mailt
   { "id": "manifest:dsh-shape", "type": "manifest-shape", "manifest": "package.json" },
   { "id": "session:custom-event", "type": "custom-session-event", "root": "." },
   { "id": "errors:cards", "type": "errors-card" },
-  { "id": "templates:variants", "type": "template-variants", "directory": "templates/bundle" }
+  { "id": "templates:variants", "type": "template-variants", "directory": "templates/bundle" },
+  { "id": "release:pipeline", "type": "release-pipeline", "workflow": ".github/workflows/release.yml" }
 ] }
 ```
 

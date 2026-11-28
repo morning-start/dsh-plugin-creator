@@ -93,6 +93,11 @@
       "id": "templates:variants",
       "type": "template-variants",
       "directory": "templates/bundle"
+    },
+    {
+      "id": "release:pipeline",
+      "type": "release-pipeline",
+      "workflow": ".github/workflows/release.yml"
     }
   ]
 }

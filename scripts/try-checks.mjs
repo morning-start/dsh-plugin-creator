@@ -416,6 +416,56 @@ try {
   const undeclaredPlaceholder = await runRules(work, tplRule)
   check('an undeclared placeholder fails', undeclaredPlaceholder.checks[0].status === 'fail', undeclaredPlaceholder.checks[0].message)
 
+  console.log('\nrelease pipeline')
+  const releaseRoot = join(work, 'release')
+  mkdirSync(join(releaseRoot, '.github', 'workflows'), { recursive: true })
+  const releaseRule = [{ id: 'release', type: 'release-pipeline', workflow: '.github/workflows/release.yml' }]
+  const workflow = (overrides = {}) => {
+    const parts = {
+      trigger: "on:\n  push:\n    tags: ['v*']\n",
+      concurrency: 'concurrency:\n  group: release-${{ github.ref }}\n  cancel-in-progress: false\n',
+      tagCheck: '      - name: The tag must match package.json\n        run: |\n          tag="${GITHUB_REF_NAME#v}"\n          node -p "require(\'./package.json\').version"\n',
+      publish: '      - name: Publish\n        run: npm publish --provenance\n',
+      release: '      - name: Release\n        run: gh release create "$GITHUB_REF_NAME" x.tgz\n',
+      ...overrides,
+    }
+    return `name: Release\n${parts.trigger}\n${parts.concurrency}\njobs:\n  release:\n    steps:\n${parts.tagCheck}${parts.publish}${parts.release}`
+  }
+
+  writeFileSync(join(releaseRoot, '.github', 'workflows', 'release.yml'), workflow())
+  const goodPipeline = await runRules(releaseRoot, releaseRule)
+  check('a tag-driven pipeline passes', goodPipeline.checks[0].status === 'pass', goodPipeline.checks[0].message)
+
+  // The whole point: a release that only happens when someone remembers to run
+  // the command is not a pipeline.
+  rmSync(join(releaseRoot, '.github', 'workflows', 'release.yml'))
+  const noWorkflow = await runRules(releaseRoot, releaseRule)
+  check('a missing workflow fails', noWorkflow.checks[0].status === 'fail', noWorkflow.checks[0].message)
+
+  writeFileSync(join(releaseRoot, '.github', 'workflows', 'release.yml'), workflow({ trigger: 'on:\n  workflow_dispatch:\n' }))
+  const wrongTrigger = await runRules(releaseRoot, releaseRule)
+  check('a workflow not triggered by a tag fails', wrongTrigger.checks[0].status === 'fail', wrongTrigger.checks[0].message)
+  check('the finding says the trigger is wrong', /v\* tag/.test(wrongTrigger.checks[0].message), wrongTrigger.checks[0].message)
+
+  writeFileSync(join(releaseRoot, '.github', 'workflows', 'release.yml'), workflow({ tagCheck: '' }))
+  const noTagCheck = await runRules(releaseRoot, releaseRule)
+  check('a workflow that never reconciles tag and version fails', noTagCheck.checks[0].status === 'fail', noTagCheck.checks[0].message)
+
+  writeFileSync(join(releaseRoot, '.github', 'workflows', 'release.yml'), workflow({ publish: '' }))
+  const noPublish = await runRules(releaseRoot, releaseRule)
+  check('a workflow that publishes nothing fails', noPublish.checks[0].status === 'fail', noPublish.checks[0].message)
+
+  writeFileSync(join(releaseRoot, '.github', 'workflows', 'release.yml'), workflow({ release: '' }))
+  const noRelease = await runRules(releaseRoot, releaseRule)
+  check('a workflow that creates no GitHub Release fails', noRelease.checks[0].status === 'fail', noRelease.checks[0].message)
+
+  // Two tags pushed together race on the latest dist-tag; only the concurrency
+  // group serialises them.
+  writeFileSync(join(releaseRoot, '.github', 'workflows', 'release.yml'), workflow({ concurrency: '' }))
+  const noConcurrency = await runRules(releaseRoot, releaseRule)
+  check('a workflow without a concurrency group fails', noConcurrency.checks[0].status === 'fail', noConcurrency.checks[0].message)
+  check('the finding names the race', /race/.test(noConcurrency.checks[0].message), noConcurrency.checks[0].message)
+
   console.log('\nchecks file')
   await expectError('a missing checks file is an error', () => loadChecks(work), /no checks file/)
   writeFileSync(join(work, 'checks.json'), JSON.stringify({ version: 1, rules: [{ id: 'entry', type: 'file-exists', path: 'package.json' }] }))

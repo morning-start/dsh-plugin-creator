@@ -49,7 +49,7 @@ plugin_manager  action: install_bundle  target: <这个检出的路径>
 
 **从模板生成任何结构化内容** —— 插件脚手架只是通用能力的一个实例：**方案**是数据（变量、文件映射、条件、规则）加模板，所以新方案是一个目录，不是新生成器。见 [docs/SCHEMES.md](docs/SCHEMES.md)。
 
-**发一个你已经装过一次的版** —— 就绪检查去问打包器**真实**会装进 tarball 的东西（不是 `files` 声称的），并拿 `engines.dsh` 和运行中的 DSH 比对，版本不匹配在安装前就被发现。演练随后打包、装进沙盒、把组合配置读回来，顺手给回滚命令。推送之后是**一条命令**：`ship` 依次跑 check → pack → publish → release → verify。顺序是撞出来的——release 排在 verify 之前，因为 0.1.1 和 0.1.2 都是发布成功却被自己的 verify 判红，结果 Release 根本没建；verify 是 advisory，registry 慢不该撤销一次已经发生的发布。这些命令也串进了 CI：**打一个 `v*` 标签就发版**，标签与 `package.json` 版本不一致会直接失败，`private: true` 时跳过 registry 步骤。**发布仍需 `--yes`**：不可撤销的事不替你做决定。见 [docs/RELEASE.md](docs/RELEASE.md)。
+**发一个你已经装过一次的版** —— 就绪检查去问打包器**真实**会装进 tarball 的东西（不是 `files` 声称的），并拿 `engines.dsh` 和运行中的 DSH 比对，版本不匹配在安装前就被发现。演练随后打包、装进沙盒、把组合配置读回来，顺手给回滚命令。**发版只有一条路径：改 `package.json` 版本 → 提交 → `git tag vX.Y.Z` → `git push origin vX.Y.Z`，剩下的交给 CI**，依次跑 check → pack → publish → release → verify。顺序是撞出来的——release 排在 verify 之前，因为 0.1.1 和 0.1.2 都是发布成功却被自己的 verify 判红，结果 Release 根本没建；verify 是 advisory，registry 慢不该撤销一次已经发生的发布。**不要手打 `npm publish`**：本地发版没有 provenance，而且版本↔标签只在推标签那一刻对账。`release:pipeline` 规则守着这条链路——workflow 丢了 tag 触发器、少了版本对账、少了 publish / Release 步骤、或没有 concurrency group，检查就红。`ship` 保留为补救与离线路径（仍需 `--yes`：不可撤销的事不替你做决定）。见 [docs/RELEASE.md](docs/RELEASE.md)。
 
 **把条目提交到插件市场** —— 市场要的是一个 YAML 文件，条目由包生成而不是手写：`url` 和 `name` 来自 `git remote`（所以不可能指向别的仓库），那一行来自 `market.json`（因为它是会被维护者对着代码核对的**声明**，不能自动截断）。发布规则先在本地跑一遍——文件名 slug、分类取值、单行以句号结尾、`: ` 要加引号、图标必须位图、tarball 的 `latest/download/` 会烂——再由 `gh` 补上只有 GitHub 能回答的两条（仓库满 1 天、`dsh-plugin` topic）。见 [docs/RELEASE.md](docs/RELEASE.md)。
 

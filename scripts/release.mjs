@@ -3,13 +3,21 @@
  * CLI front over `lib/release.js` — the same engine as the `dsh_plugin_release`
  * tool.
  *
+ * The fixed way to release is a tag push; CI does the rest:
+ *
+ *   bump package.json → commit → git tag vX.Y.Z → git push origin vX.Y.Z
+ *
+ * The commands below are the **pre-flight** and the **recovery** path:
+ *
  *   node scripts/release.mjs check [dir]
  *   node scripts/release.mjs pack [dir] [--out <dir>]
  *   node scripts/release.mjs rehearse [dir] [--sandbox rollback] [--project <dir>]
+ *   node scripts/release.mjs ship [dir] --dry-run|--yes
  *
  * `check` asks the packer what would ship and compares the package's requirement
- * with the running DSH. `rehearse` packs, installs into a sandbox, and reads the
- * composed config back. Neither publishes: `npm publish` is the user's call.
+ * with the running DSH — run it *before* tagging. `rehearse` packs, installs into
+ * a sandbox, and reads the composed config back. `ship` publishes from this
+ * machine, which is what loses provenance: use it only when CI is unavailable.
  */
 
 import { readFileSync, writeFileSync } from 'node:fs'

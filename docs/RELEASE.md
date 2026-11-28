@@ -2,11 +2,58 @@
 
 发版这件事只有两个问题：**包里到底是什么**，和**装上会不会把别人的宿主搞坏**。这个文件按顺序回答，并给出每一步的判据。
 
+## 唯一的发版方式：打 tag，交给 CI
+
+**不要手打 `npm publish`，不要手建 GitHub Release。** 发版只有一个动作：推一个 `v*` 标签。
+
+```powershell
+# 1. 改版本号——这是唯一需要手改的地方
+node -e "const p=require('./package.json');p.version='0.5.0';require('fs').writeFileSync('package.json',JSON.stringify(p,null,2)+'\n')"
+git add package.json
+git commit -m "chore(release): 0.5.0"
+
+# 2. 推代码，再推标签——推标签这一下就是发版
+git push origin main
+git tag v0.5.0
+git push origin v0.5.0
+```
+
+之后 CI（`.github/workflows/release.yml`）依次做，任何一步失败就停，不会留下半个发布：
+
+```
+check → pack → publish → release → verify(advisory)
+```
+
+| CI 步骤 | 判据 |
+|---|---|
+| The tag must match package.json | `v0.5.0` 与 `package.json` 的 `0.5.0` 不一致直接失败 |
+| The package must be installable | 有 `dsh.bundle.patch` |
+| Readiness check | 本仓库跑 `release check` |
+| Suites | 本仓库跑全部回归 |
+| Pack | `npm pack`，复制成**不带版本号**的资产名 |
+| Publish to the registry | `npm publish --provenance`；版本已存在时退化为 `dist-tag add`，不判失败 |
+| Create the GitHub Release | `gh release create`；已存在就跳过 |
+| Registry propagation | advisory，registry 慢不撤销已经发生的发布 |
+
+**为什么必须是 CI**：
+
+- **provenance 只有 CI 有**。`npm publish --provenance` 用 OIDC 身份证明「这个包是从哪个仓库、哪次提交构建的」。本地发版没有这个身份，签名是空的。
+- **版本↔标签只在推标签那一刻对账**。本地永远不知道你要打什么 tag。
+- **并发只有 `concurrency` 能挡**。两个 tag 推得近，两个 run 同时 publish，后完成的会把 `latest` 覆盖回旧版本。
+
+`node scripts/release.mjs check .` 仍然要做，但它是**发版前的自查**（打 tag 之前跑），不是发版动作。完整说明见 [`errors/release-pipeline.md`](../errors/release-pipeline.md)。
+
+这条流程由 `release:pipeline` 规则守着——workflow 丢了 tag 触发器、少了版本对账、少了 publish / Release 步骤、或者没有 concurrency group，检查就会红：
+
+```powershell
+node scripts/check-project.mjs --only release:pipeline
+```
+
 ## 0. 先选分发形态
 
 | 形态 | 怎么做 | 什么时候用 |
 |---|---|---|
-| **registry**（npm） | `npm publish` → `dsh plugin --profile <p> add <name>@<version>` | 要给别人装、要能按版本回滚 |
+| **registry**（npm） | 推 `v*` 标签（CI 发） → `dsh plugin --profile <p> add <name>@<version>` | 要给别人装、要能按版本回滚 |
 | **tarball**（本地/内网分发） | `pnpm pack` → `dsh plugin --profile <p> add <file>.tgz` | 私有分发、还没准备好公开发布 |
 | **link**（源码目录） | `dsh plugin --profile <p> add link:<目录>` | **开发态**，不是发版；改了源码重启即生效 |
 
@@ -56,16 +103,20 @@ node scripts/release.mjs rehearse . --sandbox rollback
 
 沙盒是复用的，所以第二次演练只花几秒。演练完记得把沙盒切回 `link:`（如果你还要继续改源码），否则沙盒里跑的是冻结的 tarball。
 
-## 4. 发布（代码已经在 GitHub 上之后）
+## 4. 发布（只有一条路径：推 tag）
 
-发版的后半段都在推送之后发生，所以它是一条命令：
+**标准路径就是本文件开头那四行**——改版本、提交、打 tag、推 tag。没有别的。
+
+`ship` 是**补救与离线路径**，不是日常发版：
 
 ```powershell
 node scripts/release.mjs ship . --dry-run    # 看它要做什么
 node scripts/release.mjs ship . --yes        # 真发；不可撤销，所以必须显式 --yes
 ```
 
-顺序是**在真实 registry 上撞出来的**，不是设计出来的：
+什么时候才用它：CI 不可用、需要在一个没有 Actions 的环境里发、或者要**本地演练一遍**发布链路。用它发出去的包**没有 provenance**——这是它的代价，不是它的缺陷，但也不该是默认。
+
+五步顺序是**在真实 registry 上撞出来的**，不是设计出来的（CI 用的是同一套语义）：
 
 ```
 check -> pack -> publish -> release -> verify(advisory)
@@ -94,9 +145,9 @@ node scripts/release.mjs market --write data/plugins/<owner>__<repo>.yml
 
 `private: true` 会直接挡住 `publish`，这是有意的：本地 bundle 分发不需要 registry。
 
-## 4.5 打一个 tag 就发版（GitHub Actions）
+## 4.5 CI 里那条流程长什么样
 
-上面那几条命令可以串进 CI。本仓库和**每个生成的插件包**都带一份 `.github/workflows/release.yml`，触发条件是 `push` 到 `v*` 标签：
+本仓库和**每个生成的插件包**都带一份 `.github/workflows/release.yml`，触发条件是 `push` 到 `v*` 标签：
 
 ```powershell
 git tag v0.1.0
@@ -108,7 +159,7 @@ git push origin v0.1.0
 | 步骤 | 判据 |
 |---|---|
 | 标签与版本一致 | `v1.2.0` 必须对应 `package.json` 的 `1.2.0`——防止打了 tag 忘了改版本 |
-| 包是可安装的 | 有 `dsh.bundle.patch`；本仓库额外跑 `release check` 和七套回归 |
+| 包是可安装的 | 有 `dsh.bundle.patch`；本仓库额外跑 `release check` 和全部 `scripts/try-*.mjs` 回归 |
 | 打包 | `npm pack`，然后复制成**不带版本号**的资产名 |
 | 发 registry（可选） | 配了 `NPM_TOKEN` 且 `private !== true` 才发，发完跑 `verify` |
 | 建 GitHub Release | `gh release create <tag> <asset> --generate-notes` |

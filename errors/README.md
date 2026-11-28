@@ -106,6 +106,7 @@ node scripts/check-project.mjs                           # 全跑
 | [undeclared-inject](undeclared-inject.md) | broken | `undeclared-inject` | 第一个插件 · 常见坑 |
 | [bare-name-dependency](bare-name-dependency.md) | broken | `bare-name-dependency` | 插件解剖 · 依赖解析 |
 | [custom-session-event](custom-session-event.md) | broken | `custom-session-event` | 监听事件 · 双事件平面 |
+| [release-pipeline](release-pipeline.md) | broken | `release-pipeline` | 真实事故（并发发版把 latest 弄反） |
 
 后四条来自官方文档 <https://deepseekdocs.com/docs/learn> 的「插件解剖 / 第一个插件 / 监听事件」等篇目里点名的硬性约束——文档写了「会踩」，这里把它变成会自己跑的检查。
 

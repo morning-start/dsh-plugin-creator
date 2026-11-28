@@ -44,6 +44,10 @@
       "id": "session:messages",
       "type": "session-message-identity",
       "root": "."
+    }, {
+      "id": "release:pipeline",
+      "type": "release-pipeline",
+      "workflow": ".github/workflows/release.yml"
     },
     {
       "id": "manifest:dsh-shape",
